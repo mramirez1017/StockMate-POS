@@ -1,0 +1,192 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isPlatformOwner() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/platformOwners/$(request.auth.uid));
+    }
+
+    function userIndex() {
+      return get(/databases/$(database)/documents/userStoreIndex/$(request.auth.uid));
+    }
+
+    function callerStoreId() {
+      return userIndex().data.storeId;
+    }
+
+    function userDoc(storeId) {
+      return get(/databases/$(database)/documents/stores/$(storeId)/users/$(request.auth.uid));
+    }
+
+    function isStoreUser(storeId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/stores/$(storeId)/users/$(request.auth.uid))
+        && userDoc(storeId).data.status == 'ACTIVE';
+    }
+
+    function userRole(storeId) {
+      return userDoc(storeId).data.role;
+    }
+
+    function isAdmin(storeId) {
+      return isStoreUser(storeId) && userRole(storeId) in ['OWNER', 'ADMIN'];
+    }
+
+    function isManagerOrAbove(storeId) {
+      return isStoreUser(storeId) && userRole(storeId) in ['OWNER', 'ADMIN', 'STORE_MANAGER'];
+    }
+
+    function userBranch(storeId) {
+      return userDoc(storeId).data.branchId;
+    }
+
+    function sameBranch(storeId, branchId) {
+      return isAdmin(storeId) || userBranch(storeId) == branchId;
+    }
+
+    function ownsStoreIndex(storeId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/userStoreIndex/$(request.auth.uid))
+        && userIndex().data.storeId == storeId;
+    }
+
+    function callerIsStoreAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/userStoreIndex/$(request.auth.uid))
+        && callerStoreId() != null
+        && isAdmin(callerStoreId());
+    }
+
+    match /platformOwners/{userId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow write: if false;
+    }
+
+    match /registeredEmails/{emailKey} {
+      allow read: if isPlatformOwner()
+        || (callerIsStoreAdmin() && resource.data.storeId == callerStoreId())
+        || (isSignedIn() && resource.data.email == request.auth.token.email);
+      allow write: if false;
+    }
+
+    match /userStoreIndex/{userId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow write: if false;
+    }
+
+    match /stores/{storeId} {
+      allow create: if false;
+      allow read: if isStoreUser(storeId) || ownsStoreIndex(storeId) || isPlatformOwner();
+      allow update: if isAdmin(storeId) || isPlatformOwner();
+
+      match /branches/{branchId} {
+        allow read: if isStoreUser(storeId) || ownsStoreIndex(storeId) || isPlatformOwner();
+        allow create: if isAdmin(storeId) || isPlatformOwner();
+        allow update: if isAdmin(storeId) || isPlatformOwner();
+      }
+
+      match /users/{userId} {
+        allow read: if isStoreUser(storeId) || isPlatformOwner() || (isSignedIn() && request.auth.uid == userId);
+        allow create: if false;
+        allow update: if isAdmin(storeId) || isPlatformOwner();
+      }
+
+      match /categories/{categoryId} {
+        allow read: if isStoreUser(storeId) || isPlatformOwner();
+        allow create, update: if isAdmin(storeId) || isPlatformOwner();
+        allow delete: if isAdmin(storeId) || isPlatformOwner();
+      }
+
+      match /products/{productId} {
+        allow read: if isStoreUser(storeId) || isPlatformOwner();
+        allow create, update: if isAdmin(storeId) || isPlatformOwner();
+        allow delete: if false;
+      }
+
+      match /branchInventory/{inventoryId} {
+        allow read: if isStoreUser(storeId) || isPlatformOwner();
+        allow write: if false;
+      }
+
+      match /suppliers/{supplierId} {
+        allow read: if isStoreUser(storeId) || isPlatformOwner();
+        allow write: if isAdmin(storeId) || isPlatformOwner();
+      }
+
+      match /purchaseOrders/{poId} {
+        allow read: if isStoreUser(storeId) || isPlatformOwner();
+        allow create, update: if isManagerOrAbove(storeId) || isPlatformOwner();
+        allow delete: if isAdmin(storeId) || isPlatformOwner();
+      }
+
+      match /purchaseRequests/{requestId} {
+        allow read: if isStoreUser(storeId) || isPlatformOwner();
+        allow create: if isManagerOrAbove(storeId) || isPlatformOwner();
+        allow update: if isAdmin(storeId) || isPlatformOwner();
+      }
+
+      match /deliveryReceipts/{deliveryId} {
+        allow read: if isStoreUser(storeId) || isPlatformOwner();
+        allow write: if false;
+      }
+
+      match /saleVoidRequests/{requestId} {
+        allow read: if isStoreUser(storeId) || isPlatformOwner();
+        allow write: if false;
+      }
+
+      match /sales/{saleId} {
+        allow read: if isStoreUser(storeId) || isPlatformOwner();
+        allow write: if false;
+      }
+
+      match /stockMovements/{movementId} {
+        allow read: if isStoreUser(storeId) || isPlatformOwner();
+        allow write: if false;
+      }
+
+      match /promos/{promoId} {
+        allow read: if isStoreUser(storeId) || isPlatformOwner();
+        allow write: if isAdmin(storeId) || isPlatformOwner();
+      }
+
+      match /criticalStocks/{productId} {
+        allow read: if isStoreUser(storeId) || isPlatformOwner();
+        allow write: if false;
+      }
+
+      match /disposals/{disposalId} {
+        allow read: if isStoreUser(storeId) || isPlatformOwner();
+        allow write: if false;
+      }
+
+      match /stockAdjustments/{adjustmentId} {
+        allow read: if isStoreUser(storeId) || isPlatformOwner();
+        allow create: if isManagerOrAbove(storeId) || isPlatformOwner();
+        allow update: if false;
+      }
+
+      match /auditLogs/{logId} {
+        allow read: if isAdmin(storeId) || isPlatformOwner();
+        allow write: if false;
+      }
+
+      match /dashboardStats/{docId} {
+        allow read: if isStoreUser(storeId) || ownsStoreIndex(storeId) || isPlatformOwner();
+        allow create: if false;
+        allow update: if false;
+      }
+
+      match /dailyReports/{reportId} {
+        allow read: if isManagerOrAbove(storeId) || isPlatformOwner();
+        allow write: if false;
+      }
+    }
+  }
+}

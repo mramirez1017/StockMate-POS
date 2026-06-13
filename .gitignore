@@ -1,0 +1,63 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build
+dist/
+build/
+lib/
+*.tsbuildinfo
+
+# Firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+pubsub-debug.log
+database-debug.log
+
+# Environment
+.env
+.env.local
+.env.*.local
+web/.env
+web/.env.local
+functions/.env
+scripts/service-account.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/*.iml
+android/captures/
+android/.externalNativeBuild/
+android/.cxx/
+*.apk
+*.aab
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Test
+coverage/
+
+# Misc
+*.local
+google-services.json
+GoogleService-Info.plist

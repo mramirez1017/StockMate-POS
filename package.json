@@ -1,0 +1,25 @@
+{
+  "name": "stockmate-pos",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cloud-based inventory and POS system",
+  "workspaces": [
+    "shared/types",
+    "functions",
+    "web"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "build:web": "npm run build -w web",
+    "build:functions": "npm run build -w functions",
+    "dev:web": "npm run dev -w web",
+    "dev:emulators": "firebase emulators:start",
+    "lint": "npm run lint --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "firebase": "^12.14.0"
+  }
+}
