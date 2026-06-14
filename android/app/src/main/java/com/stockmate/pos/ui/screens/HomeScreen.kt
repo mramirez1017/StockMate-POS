@@ -4,17 +4,26 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.stockmate.pos.data.models.User
 import com.stockmate.pos.navigation.NavRoutes
-import com.stockmate.pos.ui.components.HomeActionCard
-import com.stockmate.pos.ui.components.StockMateTopBar
-import com.stockmate.pos.ui.components.formatCurrency
+import com.stockmate.pos.ui.components.*
+import com.stockmate.pos.ui.theme.StockMateColors
 import com.stockmate.pos.viewmodel.HomeViewModel
+
+private data class HomeAction(
+    val title: String,
+    val description: String,
+    val route: String,
+    val icon: ImageVector,
+    val iconBackground: androidx.compose.ui.graphics.Color,
+)
 
 @Composable
 fun HomeScreen(
@@ -30,15 +39,22 @@ fun HomeScreen(
         viewModel.loadStats(user)
     }
 
-    Scaffold(
+    val actions = listOf(
+        HomeAction("POS (New Sale)", "Create new sale / transaction", NavRoutes.POS, Icons.Default.ShoppingCart, StockMateColors.Brand600),
+        HomeAction("Receive Delivery", "Verify and receive items", NavRoutes.RECEIVE_DELIVERY, Icons.Default.LocalShipping, StockMateColors.Sky500),
+        HomeAction("Stock Disposal", "Tag expired/damaged items", NavRoutes.STOCK_DISPOSAL, Icons.Default.DeleteOutline, StockMateColors.Amber500),
+        HomeAction("Product Search", "Search product or scan", NavRoutes.SCAN_PRODUCT, Icons.Default.Search, StockMateColors.Violet500),
+        HomeAction("Receipts", "View recent sales", NavRoutes.RECEIPT, Icons.AutoMirrored.Filled.ReceiptLong, StockMateColors.Teal600),
+        HomeAction("Assign Barcode", "Tag unlabeled products", NavRoutes.ASSIGN_BARCODE, Icons.Default.QrCodeScanner, StockMateColors.Violet500),
+        HomeAction("Critical Stock", "Low stock alerts", NavRoutes.CRITICAL_STOCKS, Icons.Default.Warning, StockMateColors.Amber500),
+    )
+
+    StockMateScaffold(
         topBar = {
-            StockMateTopBar(
-                title = storeName.ifBlank { "StockMate POS" },
-                actions = {
-                    IconButton(onClick = onSignOut) {
-                        Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Sign out")
-                    }
-                },
+            StockMateAppTopBar(
+                title = "Dashboard",
+                contextLabel = storeName.ifBlank { null },
+                onSignOut = onSignOut,
             )
         },
     ) { padding ->
@@ -46,82 +62,76 @@ fun HomeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = 16.dp),
         ) {
-            Text(
-                text = "Hello, ${user.fullName}",
-                style = MaterialTheme.typography.titleMedium,
-            )
-            uiState.stats?.let { stats ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    StatChip(
-                        label = "Today Sales",
-                        value = formatCurrency(stats.todaySales),
-                        modifier = Modifier.weight(1f),
-                    )
-                    StatChip(
-                        label = "Critical",
-                        value = stats.criticalStockCount.toString(),
-                        modifier = Modifier.weight(1f),
-                    )
-                    StatChip(
-                        label = "Deliveries",
-                        value = stats.pendingDeliveries.toString(),
-                        modifier = Modifier.weight(1f),
-                    )
+            StockMateScreenPadding {
+                StockMateUserCard(
+                    fullName = user.fullName,
+                    roleLabel = user.role.name,
+                )
+
+                uiState.stats?.let { stats ->
+                    StockMateTwoColumnGrid(spacing = 12.dp) {
+                        DashboardStatCard(
+                            label = "Today's Sales",
+                            value = formatCurrency(stats.todaySales),
+                            icon = Icons.Default.Payments,
+                            iconBackground = StockMateColors.Brand100,
+                            iconTint = StockMateColors.Brand600,
+                            trend = "Live today",
+                        )
+                        DashboardStatCard(
+                            label = "Transactions",
+                            value = stats.todayTransactions.toString(),
+                            icon = Icons.Default.ShoppingBag,
+                            iconBackground = StockMateColors.Sky100,
+                            iconTint = StockMateColors.Sky600,
+                        )
+                        DashboardStatCard(
+                            label = "Critical Stock",
+                            value = stats.criticalStockCount.toString(),
+                            icon = Icons.Default.Warning,
+                            iconBackground = StockMateColors.Amber100,
+                            iconTint = StockMateColors.Amber600,
+                            onClick = { onNavigate(NavRoutes.CRITICAL_STOCKS) },
+                        )
+                        DashboardStatCard(
+                            label = "Deliveries",
+                            value = stats.pendingDeliveries.toString(),
+                            icon = Icons.Default.LocalShipping,
+                            iconBackground = StockMateColors.Violet100,
+                            iconTint = StockMateColors.Violet600,
+                            onClick = { onNavigate(NavRoutes.RECEIVE_DELIVERY) },
+                        )
+                    }
+                } ?: run {
+                    if (uiState.isLoading) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 24.dp),
+                            contentAlignment = androidx.compose.ui.Alignment.Center,
+                        ) {
+                            CircularProgressIndicator(color = StockMateColors.Brand600)
+                        }
+                    }
+                }
+
+                SectionHeading(text = "Quick actions", modifier = Modifier.padding(top = 4.dp))
+
+                StockMateTwoColumnGrid(spacing = 12.dp) {
+                    actions.forEach { action ->
+                        QuickActionTile(
+                            title = action.title,
+                            description = action.description,
+                            icon = action.icon,
+                            iconBackground = action.iconBackground,
+                            onClick = { onNavigate(action.route) },
+                        )
+                    }
                 }
             }
-            Spacer(modifier = Modifier.height(8.dp))
-            HomeActionCard(
-                title = "POS",
-                subtitle = "Scan, add to cart, checkout",
-                onClick = { onNavigate(NavRoutes.POS) },
-            )
-            HomeActionCard(
-                title = "Receive Delivery",
-                subtitle = "Check in incoming purchase orders",
-                onClick = { onNavigate(NavRoutes.RECEIVE_DELIVERY) },
-            )
-            HomeActionCard(
-                title = "Assign Barcode",
-                subtitle = "Scan product labels for items without a barcode",
-                onClick = { onNavigate(NavRoutes.ASSIGN_BARCODE) },
-            )
-            HomeActionCard(
-                title = "Scan Product",
-                subtitle = "Look up price and stock",
-                onClick = { onNavigate(NavRoutes.SCAN_PRODUCT) },
-            )
-            HomeActionCard(
-                title = "Critical Stock",
-                subtitle = "Low stock alerts and purchase requests",
-                onClick = { onNavigate(NavRoutes.CRITICAL_STOCKS) },
-            )
-            HomeActionCard(
-                title = "Stock Disposal",
-                subtitle = "Record expired or damaged items",
-                onClick = { onNavigate(NavRoutes.STOCK_DISPOSAL) },
-            )
-            HomeActionCard(
-                title = "Receipts",
-                subtitle = "View and print recent sales",
-                onClick = { onNavigate(NavRoutes.RECEIPT) },
-            )
-        }
-    }
-}
-
-@Composable
-private fun StatChip(label: String, value: String, modifier: Modifier = Modifier) {
-    ElevatedCard(modifier = modifier) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Text(text = label, style = MaterialTheme.typography.labelMedium)
-            Text(text = value, style = MaterialTheme.typography.titleMedium)
         }
     }
 }

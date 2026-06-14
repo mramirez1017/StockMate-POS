@@ -78,10 +78,15 @@ firebase deploy
 
 ### 7. Android App
 
-1. Open `android/` in Android Studio
-2. Uncomment `google-services` plugin in `build.gradle.kts` files
-3. Set `default_web_client_id` in `res/values/strings.xml`
-4. Build and run on device/emulator
+1. Download Firebase config (requires `firebase login`):
+   ```powershell
+   .\scripts\setup-android-firebase.ps1
+   ```
+   Or place `google-services.json` in `android/app/` from Firebase Console.
+2. Open `android/` in Android Studio and sync Gradle.
+3. Build and run on device/emulator.
+
+The Android app ID is `com.amdevstudio.stockmatepos` (must match Firebase Console).
 
 ## Features (Full / Enhanced)
 

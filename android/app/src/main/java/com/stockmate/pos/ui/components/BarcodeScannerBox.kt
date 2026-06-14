@@ -77,9 +77,8 @@ fun BarcodeScannerBox(
                 val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
                 cameraProviderFuture.addListener({
                     val cameraProvider = cameraProviderFuture.get()
-                    val preview = Preview.Builder().build().also {
-                        it.surfaceProvider = previewView.surfaceProvider
-                    }
+                    val preview = Preview.Builder().build()
+                    preview.setSurfaceProvider(previewView.surfaceProvider)
 
                     val scanner = BarcodeScanning.getClient()
                     val executor = Executors.newSingleThreadExecutor()

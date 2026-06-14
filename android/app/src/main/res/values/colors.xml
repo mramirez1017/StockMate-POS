@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#FFFFFF</color>
+    <color name="stockmate_panel">#FFFFFF</color>
+    <color name="stockmate_background">#F3F4F6</color>
+    <color name="stockmate_brand">#059669</color>
 </resources>

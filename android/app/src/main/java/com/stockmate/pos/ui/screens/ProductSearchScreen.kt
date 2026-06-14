@@ -16,6 +16,7 @@ import com.stockmate.pos.data.models.User
 import com.stockmate.pos.ui.components.EmptyState
 import com.stockmate.pos.ui.components.ErrorText
 import com.stockmate.pos.ui.components.LoadingBox
+import com.stockmate.pos.ui.components.StockMateScaffold
 import com.stockmate.pos.ui.components.StockMateTopBar
 import com.stockmate.pos.ui.components.formatCurrency
 import com.stockmate.pos.viewmodel.ProductSearchViewModel
@@ -33,7 +34,7 @@ fun ProductSearchScreen(
         viewModel.search(user)
     }
 
-    Scaffold(
+    StockMateScaffold(
         topBar = { StockMateTopBar(title = "Product Search", onBack = onBack) },
     ) { padding ->
         Column(

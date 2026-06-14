@@ -2,5 +2,5 @@
 <resources>
     <string name="app_name">StockMate POS</string>
     <!-- Replace with Web client ID from Firebase Console / google-services.json -->
-    <string name="default_web_client_id" translatable="false">YOUR_WEB_CLIENT_ID.apps.googleusercontent.com</string>
+    <string name="default_web_client_id" translatable="false">552068389096-s3c0ifcj822ls17n8mdg8dav14vvc7f3.apps.googleusercontent.com</string>
 </resources>

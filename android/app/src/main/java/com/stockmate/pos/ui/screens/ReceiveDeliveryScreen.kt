@@ -12,6 +12,7 @@ import com.stockmate.pos.data.models.User
 import com.stockmate.pos.ui.components.EmptyState
 import com.stockmate.pos.ui.components.ErrorText
 import com.stockmate.pos.ui.components.LoadingBox
+import com.stockmate.pos.ui.components.StockMateScaffold
 import com.stockmate.pos.ui.components.StockMateTopBar
 import com.stockmate.pos.ui.components.SuccessText
 import com.stockmate.pos.viewmodel.DeliveryViewModel
@@ -29,7 +30,7 @@ fun ReceiveDeliveryScreen(
         viewModel.loadPurchaseOrders(user)
     }
 
-    Scaffold(
+    StockMateScaffold(
         topBar = { StockMateTopBar(title = "Receive Delivery", onBack = onBack) },
     ) { padding ->
         Box(

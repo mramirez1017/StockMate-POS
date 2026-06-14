@@ -17,8 +17,12 @@ import com.stockmate.pos.data.models.User
 import com.stockmate.pos.ui.components.BarcodeScannerBox
 import com.stockmate.pos.ui.components.ErrorText
 import com.stockmate.pos.ui.components.PosCheckoutSheet
+import com.stockmate.pos.ui.components.StockMateBottomBar
+import com.stockmate.pos.ui.components.StockMatePrimaryButton
+import com.stockmate.pos.ui.components.StockMateScaffold
 import com.stockmate.pos.ui.components.StockMateTopBar
 import com.stockmate.pos.ui.components.formatCurrency
+import com.stockmate.pos.ui.theme.StockMateColors
 import com.stockmate.pos.viewmodel.PosViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -35,59 +39,53 @@ fun PosScreen(
     var showCheckout by remember { mutableStateOf(false) }
     val totalDue = uiState.checkoutEstimate.total
 
-    Scaffold(
+    StockMateScaffold(
         topBar = {
             StockMateTopBar(
                 title = "POS",
                 onBack = onBack,
                 actions = {
                     IconButton(onClick = onNavigateToPrinter) {
-                        Icon(Icons.Default.Print, contentDescription = "Printer")
+                        Icon(Icons.Default.Print, contentDescription = "Printer", tint = StockMateColors.Slate600)
                     }
                     IconButton(onClick = onNavigateToSearch) {
-                        Icon(Icons.Default.Search, contentDescription = "Search")
+                        Icon(Icons.Default.Search, contentDescription = "Search", tint = StockMateColors.Slate600)
                     }
                 },
             )
         },
         bottomBar = {
-            Surface(tonalElevation = 3.dp) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Text("Items: ${uiState.itemCount}")
-                        Column(horizontalAlignment = Alignment.End) {
-                            if (uiState.pwdOrSenior && uiState.cart.isNotEmpty()) {
-                                Text(
-                                    text = "Subtotal ${formatCurrency(uiState.subtotal)}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
+            StockMateBottomBar {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Items: ${uiState.itemCount}", color = StockMateColors.Slate600)
+                    Column(horizontalAlignment = Alignment.End) {
+                        if (uiState.pwdOrSenior && uiState.cart.isNotEmpty()) {
                             Text(
-                                text = formatCurrency(if (uiState.cart.isEmpty()) uiState.subtotal else totalDue),
-                                style = MaterialTheme.typography.titleMedium,
+                                text = "Subtotal ${formatCurrency(uiState.subtotal)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = StockMateColors.Slate500,
                             )
                         }
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Button(
-                        onClick = {
-                            viewModel.openCheckout()
-                            showCheckout = true
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = uiState.cart.isNotEmpty() && !uiState.isCheckingOut,
-                    ) {
-                        if (uiState.isCheckingOut) {
-                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                        } else {
-                            Text("Checkout")
-                        }
+                        Text(
+                            text = formatCurrency(if (uiState.cart.isEmpty()) uiState.subtotal else totalDue),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = StockMateColors.Slate900,
+                        )
                     }
                 }
+                StockMatePrimaryButton(
+                    text = "Checkout",
+                    onClick = {
+                        viewModel.openCheckout()
+                        showCheckout = true
+                    },
+                    enabled = uiState.cart.isNotEmpty() && !uiState.isCheckingOut,
+                    loading = uiState.isCheckingOut,
+                )
             }
         },
     ) { padding ->
@@ -100,7 +98,7 @@ fun PosScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(160.dp),
+                    .height(140.dp),
             ) {
                 BarcodeScannerBox(
                     onBarcodeDetected = { barcode ->
@@ -111,6 +109,7 @@ fun PosScreen(
                     enabled = !uiState.isCheckingOut,
                 )
             }
+            Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
                 value = uiState.barcodeInput,
                 onValueChange = viewModel::setBarcodeInput,
@@ -126,27 +125,47 @@ fun PosScreen(
             ErrorText(uiState.error)
             if (uiState.cart.isEmpty()) {
                 Box(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text("Cart is empty. Scan or search products.")
+                    Text(
+                        "Cart is empty. Scan or search products.",
+                        color = StockMateColors.Slate500,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
                 }
             } else {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(vertical = 8.dp),
                 ) {
                     items(uiState.cart, key = { it.product.id }) { item ->
-                        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                        ElevatedCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.elevatedCardColors(containerColor = StockMateColors.Panel),
+                        ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(item.product.name, style = MaterialTheme.typography.titleMedium)
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(end = 4.dp),
+                                ) {
+                                    Text(
+                                        item.product.name,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        maxLines = 2,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                    )
                                     Text(
                                         formatCurrency(item.product.sellingPrice),
                                         style = MaterialTheme.typography.bodyMedium,

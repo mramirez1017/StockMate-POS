@@ -13,6 +13,9 @@ import androidx.compose.ui.unit.dp
 import com.stockmate.pos.data.models.DisposalReason
 import com.stockmate.pos.data.models.User
 import com.stockmate.pos.ui.components.ErrorText
+import com.stockmate.pos.ui.components.StockMateBottomBar
+import com.stockmate.pos.ui.components.StockMatePrimaryButton
+import com.stockmate.pos.ui.components.StockMateScaffold
 import com.stockmate.pos.ui.components.StockMateTopBar
 import com.stockmate.pos.ui.components.SuccessText
 import com.stockmate.pos.viewmodel.DisposalViewModel
@@ -27,23 +30,16 @@ fun StockDisposalScreen(
     val uiState by viewModel.uiState.collectAsState()
     var reasonExpanded by remember { mutableStateOf(false) }
 
-    Scaffold(
+    StockMateScaffold(
         topBar = { StockMateTopBar(title = "Stock Disposal", onBack = onBack) },
         bottomBar = {
-            Surface(tonalElevation = 3.dp) {
-                Button(
+            StockMateBottomBar {
+                StockMatePrimaryButton(
+                    text = "Submit Disposal",
                     onClick = { viewModel.submit(user) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
                     enabled = !uiState.isSubmitting,
-                ) {
-                    if (uiState.isSubmitting) {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                    } else {
-                        Text("Submit Disposal")
-                    }
-                }
+                    loading = uiState.isSubmitting,
+                )
             }
         },
     ) { padding ->

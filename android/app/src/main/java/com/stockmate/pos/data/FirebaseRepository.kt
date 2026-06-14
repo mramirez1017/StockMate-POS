@@ -2,17 +2,19 @@ package com.stockmate.pos.data
 
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.functions.FirebaseFunctions
 import com.stockmate.pos.data.models.*
 import com.stockmate.pos.util.NumberInput
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.tasks.await
 
 class FirebaseRepository {
 
     private val auth = FirebaseAuth.getInstance()
     private val db = FirebaseFirestore.getInstance()
-    private val functions = FirebaseFunctions.getInstance()
+    private val functions = FirebaseFunctions.getInstance("us-central1")
 
     val currentUid: String? get() = auth.currentUser?.uid
 
@@ -28,16 +30,70 @@ class FirebaseRepository {
 
     suspend fun loadCurrentUser(): Result<User> = runCatching {
         val uid = currentUid ?: error("Not signed in")
-        val indexSnap = db.collection("userStoreIndex").document(uid).get().await()
-        if (!indexSnap.exists()) error("User not registered in any store")
+
+        var indexSnap = readUserStoreIndex(uid)
+        if (indexSnap == null) {
+            claimAccountIfNeeded()
+            indexSnap = readUserStoreIndex(uid)
+        }
+        if (indexSnap == null || !indexSnap.exists()) {
+            error("Your email is not registered. Contact your administrator to be added.")
+        }
+
+        val indexData = indexSnap.data ?: emptyMap()
+        if (indexData["isPlatformOwner"] == true || indexData["role"] == "PLATFORM_OWNER") {
+            error("Platform owner accounts use the web app.")
+        }
+
         val storeId = indexSnap.getString("storeId") ?: error("Missing storeId")
-        val userSnap = db.collection("stores").document(storeId)
+        var userSnap = db.collection("stores").document(storeId)
             .collection("users").document(uid).get().await()
+        if (!userSnap.exists()) {
+            delay(500)
+            userSnap = db.collection("stores").document(storeId)
+                .collection("users").document(uid).get().await()
+        }
         if (!userSnap.exists()) error("User profile not found")
-        parseUser(userSnap.id, userSnap.data ?: emptyMap()).also {
-            if (it.status != EntityStatus.ACTIVE) error("Account is inactive")
-            if (!it.canAccessPos) error("Role not allowed on mobile")
-            if (it.branchId.isBlank()) error("No branch assigned")
+
+        parseUser(userSnap.id, userSnap.data ?: emptyMap()).also { user ->
+            if (user.status != EntityStatus.ACTIVE) error("Account is inactive")
+            if (!user.canAccessPos) error("Role not allowed on mobile")
+            if (user.role in listOf(UserRole.CASHIER, UserRole.STORE_MANAGER) && user.branchId.isBlank()) {
+                error("No branch assigned. Contact your administrator.")
+            }
+            if (user.storeId.isNotBlank() && user.storeId != storeId) {
+                error("Store assignment mismatch. Contact your administrator.")
+            }
+        }
+    }
+
+    private suspend fun readUserStoreIndex(uid: String, retries: Int = 4): DocumentSnapshot? {
+        repeat(retries) { attempt ->
+            val snap = db.collection("userStoreIndex").document(uid).get().await()
+            if (snap.exists()) return snap
+            if (attempt < retries - 1) delay(400L * (attempt + 1))
+        }
+        val snap = db.collection("userStoreIndex").document(uid).get().await()
+        return snap.takeIf { it.exists() }
+    }
+
+    private suspend fun claimAccountIfNeeded() {
+        try {
+            functions.getHttpsCallable("claimAccount").call(emptyMap<String, Any>()).await()
+        } catch (e: Exception) {
+            val raw = e.message.orEmpty()
+            val friendly = when {
+                raw.contains("not registered", ignoreCase = true) ->
+                    "Your email is not registered. Contact your administrator."
+                raw.contains("inactive", ignoreCase = true) ->
+                    "Your account registration is inactive."
+                raw.contains("already been used", ignoreCase = true) ->
+                    "This email has already been used to sign in."
+                raw.contains("missing branch", ignoreCase = true) ->
+                    "Your account is missing a branch. Contact your administrator."
+                else -> null
+            }
+            if (friendly != null) throw IllegalStateException(friendly)
         }
     }
 

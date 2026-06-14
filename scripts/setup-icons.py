@@ -29,6 +29,26 @@ FOREGROUND_SIZES = {
     "mipmap-xxxhdpi": 432,
 }
 
+# Adaptive icon safe zone is ~66% of the 108dp canvas; the source art already
+# includes a white rounded background, so we scale slightly larger than the safe zone.
+ADAPTIVE_ICON_SCALE = 0.86
+
+
+def prepare_legacy_launcher(source: Image.Image, size: int) -> Image.Image:
+    icon = source.convert("RGBA")
+    return icon.resize((size, size), Image.Resampling.LANCZOS)
+
+
+def prepare_adaptive_foreground(source: Image.Image, canvas_size: int) -> Image.Image:
+    icon = source.convert("RGBA")
+    target = max(1, int(canvas_size * ADAPTIVE_ICON_SCALE))
+    fitted = icon.copy()
+    fitted.thumbnail((target, target), Image.Resampling.LANCZOS)
+    canvas = Image.new("RGBA", (canvas_size, canvas_size), (0, 0, 0, 0))
+    offset = ((canvas_size - fitted.width) // 2, (canvas_size - fitted.height) // 2)
+    canvas.paste(fitted, offset, fitted)
+    return canvas
+
 
 def save_web_assets() -> None:
     WEB_PUBLIC.mkdir(parents=True, exist_ok=True)
@@ -82,20 +102,31 @@ def save_login_background_assets() -> None:
     login.save(ANDROID_DRAWABLE / "login_background.png", optimize=True)
 
 
+def save_android_sidebar_icon() -> None:
+    sidebar = WEB_PUBLIC / "sidebar-icon.png"
+    if not sidebar.exists():
+        return
+    ANDROID_DRAWABLE.mkdir(parents=True, exist_ok=True)
+    Image.open(sidebar).convert("RGBA").save(
+        ANDROID_DRAWABLE / "sidebar_icon.png",
+        optimize=True,
+    )
+
+
 def save_android_assets() -> None:
     icon = Image.open(ANDROID_SOURCE).convert("RGBA")
 
     for folder, size in MIPMAP_SIZES.items():
         out_dir = ANDROID_RES / folder
         out_dir.mkdir(parents=True, exist_ok=True)
-        resized = icon.resize((size, size), Image.Resampling.LANCZOS)
-        resized.save(out_dir / "ic_launcher.png", optimize=True)
-        resized.save(out_dir / "ic_launcher_round.png", optimize=True)
+        launcher = prepare_legacy_launcher(icon, size)
+        launcher.save(out_dir / "ic_launcher.png", optimize=True)
+        launcher.save(out_dir / "ic_launcher_round.png", optimize=True)
 
     for folder, size in FOREGROUND_SIZES.items():
         out_dir = ANDROID_RES / folder
         out_dir.mkdir(parents=True, exist_ok=True)
-        icon.resize((size, size), Image.Resampling.LANCZOS).save(
+        prepare_adaptive_foreground(icon, size).save(
             out_dir / "ic_launcher_foreground.png",
             optimize=True,
         )
@@ -112,6 +143,7 @@ def main() -> None:
     save_web_assets()
     save_android_assets()
     save_login_background_assets()
+    save_android_sidebar_icon()
     print("Icons generated successfully.")
 
 

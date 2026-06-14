@@ -13,6 +13,7 @@ import com.stockmate.pos.data.models.User
 import com.stockmate.pos.ui.components.BarcodeScannerBox
 import com.stockmate.pos.ui.components.ErrorText
 import com.stockmate.pos.ui.components.LoadingBox
+import com.stockmate.pos.ui.components.StockMateScaffold
 import com.stockmate.pos.ui.components.StockMateTopBar
 import com.stockmate.pos.ui.components.formatCurrency
 import com.stockmate.pos.viewmodel.AssignBarcodeViewModel
@@ -38,7 +39,7 @@ fun AssignBarcodeScreen(
         return
     }
 
-    Scaffold(
+    StockMateScaffold(
         topBar = { StockMateTopBar(title = "Assign Barcode", onBack = onBack) },
     ) { padding ->
         Column(
@@ -117,7 +118,7 @@ private fun AssignBarcodeScanPanel(
     val uiState by viewModel.uiState.collectAsState()
     val product = uiState.selectedProduct ?: return
 
-    Scaffold(
+    StockMateScaffold(
         topBar = { StockMateTopBar(title = "Scan Barcode", onBack = onBack) },
     ) { padding ->
         Column(

@@ -5,12 +5,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
+import com.stockmate.pos.ui.theme.StockMateColors
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.rememberNavController
-import com.stockmate.pos.navigation.NavRoutes
 import com.stockmate.pos.navigation.StockMateNavHost
 import com.stockmate.pos.ui.components.LoadingBox
 import com.stockmate.pos.ui.screens.LoginScreen
@@ -23,7 +23,10 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             StockMateTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = StockMateColors.Background,
+                ) {
                     StockMateRoot()
                 }
             }
@@ -35,23 +38,19 @@ class MainActivity : ComponentActivity() {
 private fun StockMateRoot() {
     val authViewModel: AuthViewModel = viewModel()
     val authState by authViewModel.uiState.collectAsState()
-    val navController = rememberNavController()
 
     when {
-        authState.isLoading -> LoadingBox()
+        authState.isCheckingSession -> LoadingBox()
         authState.user == null -> LoginScreen(viewModel = authViewModel)
         else -> {
             val user = authState.user!!
+            // Fresh nav stack per signed-in session (avoids stale routes after logout).
+            val navController = rememberNavController()
             StockMateNavHost(
                 navController = navController,
                 user = user,
                 storeName = authState.store?.name ?: "StockMate POS",
-                onSignOut = {
-                    authViewModel.signOut()
-                    navController.navigate(NavRoutes.LOGIN) {
-                        popUpTo(0) { inclusive = true }
-                    }
-                },
+                onSignOut = { authViewModel.signOut() },
             )
         }
     }

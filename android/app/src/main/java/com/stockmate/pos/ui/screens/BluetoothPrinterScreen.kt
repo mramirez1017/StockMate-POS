@@ -17,6 +17,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.stockmate.pos.ui.components.StockMateBottomBar
+import com.stockmate.pos.ui.components.StockMatePrimaryButton
+import com.stockmate.pos.ui.components.StockMateScaffold
 import com.stockmate.pos.ui.components.StockMateTopBar
 
 @Composable
@@ -59,23 +62,19 @@ fun BluetoothPrinterScreen(
 
     LaunchedEffect(Unit) { loadDevices() }
 
-    Scaffold(
+    StockMateScaffold(
         topBar = { StockMateTopBar(title = "Bluetooth Printer", onBack = onBack) },
         bottomBar = {
-            Surface(tonalElevation = 3.dp) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Button(
-                        onClick = {
-                            statusMessage = selectedDevice?.let {
-                                "Test print sent to ${it.name} (integrate ESC/POS SDK)"
-                            } ?: "Select a printer first"
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = selectedDevice != null,
-                    ) {
-                        Text("Test Print")
-                    }
-                }
+            StockMateBottomBar {
+                StockMatePrimaryButton(
+                    text = "Test Print",
+                    onClick = {
+                        statusMessage = selectedDevice?.let {
+                            "Test print sent to ${it.name} (integrate ESC/POS SDK)"
+                        } ?: "Select a printer first"
+                    },
+                    enabled = selectedDevice != null,
+                )
             }
         },
     ) { padding ->

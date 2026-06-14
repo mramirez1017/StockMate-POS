@@ -50,7 +50,8 @@ fun PosCheckoutSheet(
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp)
-                .padding(bottom = 24.dp),
+                .padding(bottom = 32.dp)
+                .windowInsetsPadding(WindowInsets.navigationBars),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text("Complete transaction", style = MaterialTheme.typography.titleLarge)
@@ -199,32 +200,21 @@ fun PosCheckoutSheet(
 
             ErrorText(uiState.error)
 
-            Row(
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                OutlinedButton(
+                StockMateSecondaryButton(
+                    text = "Cancel",
                     onClick = onDismiss,
                     enabled = !uiState.isCheckingOut,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text("Cancel")
-                }
-                Button(
+                )
+                StockMatePrimaryButton(
+                    text = "Complete sale",
                     onClick = onComplete,
                     enabled = !uiState.isCheckingOut && canComplete,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    if (uiState.isCheckingOut) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                        )
-                    } else {
-                        Text("Complete")
-                    }
-                }
+                    loading = uiState.isCheckingOut,
+                )
             }
         }
     }

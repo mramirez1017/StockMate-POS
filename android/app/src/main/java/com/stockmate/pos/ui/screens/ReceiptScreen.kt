@@ -14,6 +14,10 @@ import androidx.compose.ui.unit.dp
 import com.stockmate.pos.data.models.Sale
 import com.stockmate.pos.ui.components.EmptyState
 import com.stockmate.pos.ui.components.LoadingBox
+import com.stockmate.pos.ui.components.StockMateBottomBar
+import com.stockmate.pos.ui.components.StockMatePrimaryButton
+import com.stockmate.pos.ui.components.StockMateSecondaryButton
+import com.stockmate.pos.ui.components.StockMateScaffold
 import com.stockmate.pos.ui.components.StockMateTopBar
 import com.stockmate.pos.ui.components.formatCurrency
 import java.text.SimpleDateFormat
@@ -36,7 +40,7 @@ fun ReceiptScreen(
         if (sale == null) onLoadHistory()
     }
 
-    Scaffold(
+    StockMateScaffold(
         topBar = {
             StockMateTopBar(
                 title = if (sale != null) "Receipt" else "Receipts",
@@ -52,20 +56,9 @@ fun ReceiptScreen(
         },
         bottomBar = {
             if (sale != null) {
-                Surface(tonalElevation = 3.dp) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        OutlinedButton(onClick = onPrint, modifier = Modifier.weight(1f)) {
-                            Text("Print")
-                        }
-                        Button(onClick = onNewSale, modifier = Modifier.weight(1f)) {
-                            Text("New Sale")
-                        }
-                    }
+                StockMateBottomBar {
+                    StockMateSecondaryButton(text = "Print", onClick = onPrint)
+                    StockMatePrimaryButton(text = "New Sale", onClick = onNewSale)
                 }
             }
         },
