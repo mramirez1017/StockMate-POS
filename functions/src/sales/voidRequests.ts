@@ -8,6 +8,7 @@ import {
 } from "../utils/auth";
 import { collection, db, now } from "../utils/firestore";
 import { invalidArgument, notFound } from "../utils/errors";
+import { createNotifications } from "../utils/notify";
 import { Sale } from "@stockmate/types";
 import {
   createVoidRequest,
@@ -49,6 +50,27 @@ export const voidSale = onCall(async (request) => {
   }
 
   const voidRequest = await createVoidRequest(storeId, sale, saleRefResolved, voidReason, user, uid);
+
+  try {
+    await createNotifications({
+      storeId,
+      kind: "SALE_VOID_REQUEST",
+      title: "Void request needs approval",
+      body: `${user.fullName} asked to void sale #${sale.id.slice(-6).toUpperCase()} (₱${sale.total.toFixed(2)}): ${voidReason}`,
+      link: "/activity",
+      refType: "SALE_VOID",
+      refId: voidRequest.id,
+      branchId: sale.branchId,
+      actorId: uid,
+      actorName: user.fullName,
+      toAdmins: true,
+      toBranch: sale.branchId,
+      excludeUid: uid,
+    });
+  } catch (err) {
+    console.error("createNotifications failed after void request", err);
+  }
+
   return { status: "PENDING" as const, voidRequestId: voidRequest.id, saleId };
 });
 
@@ -81,6 +103,26 @@ export const approveSaleVoid = onCall(async (request) => {
     ...(reviewNote?.trim() ? { reviewNote: reviewNote.trim() } : {}),
   });
 
+  if (voidRequest.requestedBy && voidRequest.requestedBy !== uid) {
+    try {
+      await createNotifications({
+        storeId,
+        kind: "SALE_VOID_RESOLVED",
+        title: "Void request approved",
+        body: `${user.fullName} approved your void of sale #${sale.id.slice(-6).toUpperCase()}.`,
+        link: "/activity",
+        refType: "SALE_VOID",
+        refId: voidRequestId,
+        branchId: sale.branchId,
+        actorId: uid,
+        actorName: user.fullName,
+        recipientUids: [voidRequest.requestedBy],
+      });
+    } catch (err) {
+      console.error("createNotifications failed after approveSaleVoid", err);
+    }
+  }
+
   return { status: "APPROVED" as const, saleId: sale.id };
 });
 
@@ -108,6 +150,26 @@ export const rejectSaleVoid = onCall(async (request) => {
     });
     tx.update(saleRef, { pendingVoidRequestId: admin.firestore.FieldValue.delete() });
   });
+
+  if (voidRequest.requestedBy && voidRequest.requestedBy !== uid) {
+    try {
+      await createNotifications({
+        storeId,
+        kind: "SALE_VOID_RESOLVED",
+        title: "Void request rejected",
+        body: `${user.fullName} rejected your void of sale #${voidRequest.saleId.slice(-6).toUpperCase()}.${reviewNote?.trim() ? ` Note: ${reviewNote.trim()}` : ""}`,
+        link: "/activity",
+        refType: "SALE_VOID",
+        refId: voidRequestId,
+        branchId: voidRequest.branchId,
+        actorId: uid,
+        actorName: user.fullName,
+        recipientUids: [voidRequest.requestedBy],
+      });
+    } catch (err) {
+      console.error("createNotifications failed after rejectSaleVoid", err);
+    }
+  }
 
   return { status: "REJECTED" as const, saleId: voidRequest.saleId };
 });

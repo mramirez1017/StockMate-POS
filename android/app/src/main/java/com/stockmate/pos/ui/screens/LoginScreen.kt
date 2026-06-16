@@ -6,11 +6,14 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -106,6 +109,19 @@ fun LoginScreen(
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 28.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
+                    Image(
+                        painter = painterResource(R.drawable.sidebar_icon),
+                        contentDescription = null,
+                        modifier = Modifier.size(56.dp),
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "StockMate POS",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = StockMateColors.Brand700,
+                        textAlign = TextAlign.Center,
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "Sign in to continue",
                         style = MaterialTheme.typography.titleMedium,

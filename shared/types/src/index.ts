@@ -11,6 +11,7 @@ export type POStatus =
   | "IN_TRANSIT"
   | "PARTIALLY_RECEIVED"
   | "RECEIVED"
+  | "COMPLETED"
   | "CANCELLED";
 export type StockMovementType =
   | "DELIVERY_RECEIVED"
@@ -47,7 +48,7 @@ export interface SaleVoidRequest {
   reviewNote?: string;
 }
 export type AdjustmentStatus = "PENDING" | "APPROVED" | "REJECTED";
-export type PurchaseRequestStatus = "PENDING" | "APPROVED" | "ORDERED" | "REJECTED";
+export type PurchaseRequestStatus = "PENDING" | "APPROVED" | "ORDERED" | "FULFILLED" | "REJECTED";
 
 // ─── Permissions ───────────────────────────────────────────────────────────
 
@@ -57,6 +58,37 @@ export interface CustomPermissions {
   canViewSupplierCost?: boolean;
   canCreatePurchaseRequest?: boolean;
   canChangePrice?: boolean;
+}
+
+/**
+ * Permissions a branch manager / cashier can request for themselves. Each
+ * request is reviewed by a store admin; approval grants the flag on the user.
+ */
+export type RequestablePermission =
+  | "canApproveStockAdjustment"
+  | "canViewSupplierCost"
+  | "canCreatePurchaseRequest"
+  | "canChangePrice";
+
+export type PermissionRequestStatus = "PENDING" | "APPROVED" | "REJECTED";
+
+/** Lives at stores/{storeId}/permissionRequests/{id}. Written by Cloud Functions only. */
+export interface PermissionRequest {
+  id: string;
+  storeId: string;
+  branchId: string;
+  permission: RequestablePermission;
+  /** Why the requester needs the access. */
+  reason?: string;
+  status: PermissionRequestStatus;
+  requestedBy: string;
+  requestedByName?: string;
+  reviewedBy?: string;
+  reviewedByName?: string;
+  reviewedAt?: number;
+  reviewNote?: string;
+  createdAt: number;
+  updatedAt?: number;
 }
 
 // ─── Store & Branch ──────────────────────────────────────────────────────────
@@ -221,24 +253,96 @@ export interface PurchaseOrder {
   attachmentUrl?: string;
   status: POStatus;
   items: PurchaseOrderItem[];
+  /** Purchase requests this PO fulfils (when created from branch requests). */
+  purchaseRequestIds?: string[];
   createdBy: string;
+  createdByName?: string;
+  completedBy?: string;
+  completedByName?: string;
+  completedAt?: number;
   createdAt: number;
   updatedAt?: number;
 }
+
+/** What a branch is asking the admin for. */
+export type PurchaseRequestType =
+  | "PRODUCT_REORDER"
+  | "NEW_PRODUCT"
+  | "NEW_CATEGORY"
+  | "NEW_SUPPLIER";
 
 export interface PurchaseRequest {
   id: string;
   storeId: string;
   branchId: string;
-  productId: string;
-  productName: string;
-  suggestedQty: number;
-  currentStock: number;
-  criticalLevel: number;
+  /** Defaults to PRODUCT_REORDER for legacy records created before request types. */
+  requestType?: PurchaseRequestType;
+  /** Who started the request. Admin-initiated requests are auto-approved. Defaults to BRANCH. */
+  origin?: "BRANCH" | "ADMIN";
+  /** Proposed name for a new product / category / supplier request. */
+  subject?: string;
+  /** Free-text explanation so the admin understands the request. */
+  description?: string;
+  /** Set for product reorders (and once a NEW_PRODUCT request is fulfilled). */
+  productId?: string;
+  productName?: string;
+  suggestedQty?: number;
+  currentStock?: number;
+  criticalLevel?: number;
   status: PurchaseRequestStatus;
   requestedBy: string;
+  requestedByName?: string;
+  reviewedBy?: string;
+  reviewedByName?: string;
+  reviewedAt?: number;
+  reviewNote?: string;
+  /** PO created to fulfil this request. */
+  purchaseOrderId?: string;
+  /** Who completed the request by creating the product/category/supplier. */
+  fulfilledBy?: string;
+  fulfilledByName?: string;
+  fulfilledAt?: number;
+  /** Id of the product/category/supplier created to satisfy a new-item request. */
+  resultId?: string;
   createdAt: number;
+  updatedAt?: number;
   notes?: string;
+}
+
+// ─── Procurement transaction log ─────────────────────────────────────────────
+
+/** A single immutable event in the request → PO → delivery → completion timeline. */
+export type ProcurementEventType =
+  | "REQUEST_CREATED"
+  | "REQUEST_UPDATED"
+  | "REQUEST_APPROVED"
+  | "REQUEST_REJECTED"
+  | "REQUEST_FULFILLED"
+  | "PO_CREATED"
+  | "PO_ORDERED"
+  | "PO_IN_TRANSIT"
+  | "DELIVERY_RECEIVED"
+  | "DELIVERY_DISCREPANCY"
+  | "PO_COMPLETED"
+  | "PO_CANCELLED";
+
+/** Lives at stores/{storeId}/procurementEvents/{eventId}. Written by Cloud Functions only. */
+export interface ProcurementEvent {
+  id: string;
+  storeId: string;
+  branchId: string;
+  type: ProcurementEventType;
+  message: string;
+  /** Related purchase order (when applicable). */
+  poId?: string;
+  poNumber?: string;
+  /** Related purchase request (when applicable). */
+  requestId?: string;
+  actorId: string;
+  actorName?: string;
+  actorRole?: UserRole;
+  meta?: Record<string, unknown>;
+  createdAt: number;
 }
 
 // ─── Delivery ────────────────────────────────────────────────────────────────
@@ -376,8 +480,12 @@ export interface StockAdjustment {
   remarks?: string;
   status: AdjustmentStatus;
   requestedBy: string;
+  requestedByName?: string;
   approvedBy?: string;
+  reviewedByName?: string;
+  reviewNote?: string;
   createdAt: number;
+  updatedAt?: number;
   resolvedAt?: number;
 }
 
@@ -433,6 +541,103 @@ export interface DailyReport {
   createdAt: number;
 }
 
+// ─── Communication (threads & messages) ─────────────────────────────────────
+
+/** What a conversation thread is attached to. */
+export type ThreadContextType =
+  | "PURCHASE_ORDER"
+  | "DELIVERY"
+  | "PURCHASE_REQUEST"
+  | "STOCK_ADJUSTMENT"
+  | "SALE_VOID"
+  | "GENERAL";
+
+export type ThreadStatus = "OPEN" | "CLOSED";
+
+/**
+ * A real-time conversation between store staff (admin ↔ manager ↔ cashier),
+ * usually anchored to an operational record (a PO, a delivery, a request).
+ * Lives at stores/{storeId}/threads/{threadId}.
+ */
+export interface Thread {
+  id: string;
+  storeId: string;
+  branchId: string;
+  contextType: ThreadContextType;
+  /** Id of the anchor record (poId, deliveryId, requestId…). Empty for GENERAL. */
+  contextId: string;
+  title: string;
+  /** Uids of everyone who has posted / been added. */
+  participantUids: string[];
+  lastMessage?: string;
+  lastSenderId?: string;
+  lastSenderName?: string;
+  lastSenderRole?: UserRole;
+  lastMessageAt?: number;
+  messageCount: number;
+  /** Per-user last-read timestamp. Unread when lastMessageAt > reads[uid]. */
+  reads: Record<string, number>;
+  status: ThreadStatus;
+  createdBy: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** A single chat message inside a thread (stores/{storeId}/threads/{threadId}/messages/{id}). */
+export interface ThreadMessage {
+  id: string;
+  threadId: string;
+  storeId: string;
+  senderId: string;
+  senderName: string;
+  senderRole: UserRole;
+  text: string;
+  /** Soft-deleted (unsent) — hidden in UI but kept for audit. */
+  deleted?: boolean;
+  createdAt: number;
+}
+
+// ─── Notifications ───────────────────────────────────────────────────────────
+
+export type NotificationKind =
+  | "NEW_MESSAGE"
+  | "PO_CREATED"
+  | "DELIVERY_RECEIVED"
+  | "DELIVERY_DISCREPANCY"
+  | "PURCHASE_REQUEST"
+  | "PURCHASE_REQUEST_RESOLVED"
+  | "PO_COMPLETED"
+  | "STOCK_ADJUSTMENT_REQUEST"
+  | "STOCK_ADJUSTMENT_RESOLVED"
+  | "SALE_VOID_REQUEST"
+  | "SALE_VOID_RESOLVED"
+  | "PERMISSION_REQUEST"
+  | "PERMISSION_REQUEST_RESOLVED";
+
+/**
+ * Per-recipient in-app notification. One doc is written per recipient so unread
+ * state and security rules stay simple. Lives at stores/{storeId}/notifications/{id}.
+ */
+export interface StoreNotification {
+  id: string;
+  storeId: string;
+  recipientUid: string;
+  branchId?: string;
+  kind: NotificationKind;
+  title: string;
+  body: string;
+  /** Web route to open when clicked. */
+  link?: string;
+  /** Deep-link metadata for mobile navigation. */
+  refType?: string;
+  refId?: string;
+  threadId?: string;
+  read: boolean;
+  actorId?: string;
+  actorName?: string;
+  createdAt: number;
+}
+
 // ─── Callable payloads ───────────────────────────────────────────────────────
 
 export interface CartItemInput {
@@ -454,3 +659,19 @@ export interface ApplyPromoResult {
   totalDiscount: number;
   appliedPromoIds: string[];
 }
+
+export type SendMessageInput = {
+  /** Reuse an existing thread, or omit to get-or-create by context. */
+  threadId?: string;
+  contextType?: ThreadContextType;
+  contextId?: string;
+  /** Title used when a thread is created. */
+  title?: string;
+  branchId?: string;
+  text: string;
+};
+
+export type SendMessageResult = {
+  threadId: string;
+  messageId: string;
+};

@@ -6,6 +6,7 @@ import {
   ReactNode,
   useCallback,
   useMemo,
+  useRef,
 } from "react";
 import {
   User as FirebaseUser,
@@ -14,7 +15,7 @@ import {
   GoogleAuthProvider,
   signOut,
 } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, onSnapshot } from "firebase/firestore";
 import { User, Store, PlatformOwner } from "@stockmate/types";
 import { auth, db } from "@/firebase";
 import { api, setApiStoreContext } from "@/lib/api";
@@ -123,6 +124,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [signingIn, setSigningIn] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  // Live listener on the signed-in user's profile so role/status/permission
+  // changes made by an admin reflect immediately, without a re-login.
+  const userUnsubRef = useRef<null | (() => void)>(null);
+
+  const stopWatchingUser = useCallback(() => {
+    userUnsubRef.current?.();
+    userUnsubRef.current = null;
+  }, []);
+
+  /** Keep `user` in sync with live edits to their profile document. */
+  const watchUser = useCallback((sid: string, uid: string) => {
+    stopWatchingUser();
+    userUnsubRef.current = onSnapshot(
+      doc(db, "stores", sid, "users", uid),
+      (snap) => {
+        if (!snap.exists()) {
+          setUser(null);
+          setAuthError("User profile not found. Contact your administrator.");
+          return;
+        }
+        const userData = { id: snap.id, ...snap.data() } as User;
+        if (userData.status !== "ACTIVE") {
+          setUser(null);
+          setAuthError("Your account is inactive. Contact your administrator.");
+          return;
+        }
+        if (userData.storeId !== sid) {
+          setUser(null);
+          setAuthError("Store assignment mismatch. Contact your administrator.");
+          return;
+        }
+        setAuthError(null);
+        setUser(userData);
+      },
+      (err) => console.error("user profile listener error", err)
+    );
+  }, [stopWatchingUser]);
 
   const loadStoreDoc = async (sid: string) => {
     const storeSnap = await getDoc(doc(db, "stores", sid));
@@ -133,6 +171,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const applyPlatformOwnerSession = async (po: PlatformOwner) => {
+    stopWatchingUser();
     setIsPlatformOwner(true);
     setPlatformOwner(po);
     setUser(null);
@@ -277,14 +316,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(userData);
       const storeDoc = await loadStoreDoc(sid);
       setStore(storeDoc);
+
+      // Stay subscribed to live profile changes (permissions, role, status).
+      watchUser(sid, fbUser.uid);
     },
-    [analyticsStoreId]
+    [analyticsStoreId, watchUser]
   );
 
   useEffect(() => {
-    return onAuthStateChanged(auth, async (fbUser) => {
+    const unsubAuth = onAuthStateChanged(auth, async (fbUser) => {
       setSignedInUser(fbUser);
       if (!fbUser) {
+        stopWatchingUser();
         setUser(null);
         setStore(null);
         setStoreId(null);
@@ -309,7 +352,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       }
     });
-  }, [loadProfile]);
+    return () => {
+      unsubAuth();
+      stopWatchingUser();
+    };
+  }, [loadProfile, stopWatchingUser]);
 
   const setAnalyticsStoreId = async (id: string | null) => {
     setAnalyticsStoreIdState(id);

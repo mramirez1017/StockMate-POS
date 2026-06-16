@@ -69,11 +69,32 @@ function LoginForm({
   compact?: boolean;
 }) {
   return (
-    <div className="mx-auto w-full max-w-sm">
+    <div className="mx-auto w-full max-w-sm animate-slide-up">
       {!compact && (
         <div className="mb-8">
+          <div className="mb-5 flex items-center gap-3">
+            <img
+              src="/sidebar-icon.png"
+              alt="StockMate"
+              className="h-12 w-12 rounded-xl shadow-glow-sm"
+            />
+            <span className="bg-gradient-to-r from-brand-700 to-accent-600 bg-clip-text text-xl font-bold tracking-tight text-transparent">
+              StockMate POS
+            </span>
+          </div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Welcome back</h1>
           <p className="mt-2 text-sm text-slate-600">Sign in to manage inventory, sales, and deliveries.</p>
+        </div>
+      )}
+
+      {compact && (
+        <div className="mb-6 flex flex-col items-center gap-3">
+          <img
+            src="/sidebar-icon.png"
+            alt="StockMate"
+            className="h-16 w-16 rounded-2xl shadow-glow"
+          />
+          <span className="text-lg font-bold tracking-tight text-white drop-shadow-md">StockMate POS</span>
         </div>
       )}
 

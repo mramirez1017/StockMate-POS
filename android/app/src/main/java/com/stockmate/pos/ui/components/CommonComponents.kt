@@ -154,7 +154,10 @@ fun StockMateBottomBar(
 
                 .fillMaxWidth()
 
-                .windowInsetsPadding(WindowInsets.navigationBars)
+                // Float above the on-screen keyboard when it's open; otherwise
+                // just clear the navigation bar.
+
+                .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime))
 
                 .padding(horizontal = 16.dp, vertical = 12.dp),
 

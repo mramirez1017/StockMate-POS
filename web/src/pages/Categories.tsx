@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { collection, onSnapshot, addDoc, updateDoc, doc, deleteField } from "firebase/firestore";
 import { Plus } from "lucide-react";
 import { db } from "@/firebase";
@@ -10,6 +11,7 @@ import Modal from "@/components/Modal";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { statusBadgeClass } from "@/lib/format";
 import { isStoreAdmin } from "@/lib/permissions";
+import { api } from "@/lib/api";
 
 interface CategoryForm {
   name: string;
@@ -52,8 +54,11 @@ export default function Categories() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [fulfillRequestId, setFulfillRequestId] = useState<string | null>(null);
 
   const canManage = user ? isStoreAdmin(user) : false;
+  const location = useLocation();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!storeId) return;
@@ -62,6 +67,18 @@ export default function Categories() {
       setLoading(false);
     });
   }, [storeId]);
+
+  useEffect(() => {
+    const st = location.state as { openCreate?: boolean; prefillName?: string; fulfillRequestId?: string } | null;
+    if (st?.openCreate && canManage) {
+      setEditing(null);
+      setForm({ ...emptyForm(), name: st.prefillName ?? "" });
+      setFulfillRequestId(st.fulfillRequestId ?? null);
+      setFormError(null);
+      setModalOpen(true);
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location, canManage, navigate]);
 
   const openCreate = () => {
     setEditing(null);
@@ -97,11 +114,23 @@ export default function Categories() {
       if (editing) {
         await updateDoc(doc(db, "stores", storeId, "categories", editing.id), payload);
       } else {
-        await addDoc(collection(db, "stores", storeId, "categories"), {
+        const ref = await addDoc(collection(db, "stores", storeId, "categories"), {
           ...payload,
           storeId,
           createdAt: Date.now(),
         });
+        if (fulfillRequestId) {
+          try {
+            await api.fulfillPurchaseRequest({
+              purchaseRequestId: fulfillRequestId,
+              resultId: ref.id,
+              resultName: payload.name as string,
+            });
+          } catch {
+            // The category was created; linking is best-effort.
+          }
+          setFulfillRequestId(null);
+        }
       }
       setModalOpen(false);
     } catch (err) {

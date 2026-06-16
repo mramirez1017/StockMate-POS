@@ -1,21 +1,31 @@
 import { useEffect, useMemo, useState } from "react";
-import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
-import { Link } from "react-router-dom";
-import { Plus } from "lucide-react";
+import { collection, onSnapshot } from "firebase/firestore";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Plus, Search } from "lucide-react";
 import { db } from "@/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { PurchaseOrder, Supplier, Branch, Product, Category, POStatus } from "@stockmate/types";
+import { branchScopedQuery, isStoreWideAccess } from "@/lib/branchScope";
 import PageHeader from "@/components/PageHeader";
 import DataTable from "@/components/DataTable";
 import Modal from "@/components/Modal";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import SearchableSelect from "@/components/SearchableSelect";
 import IntegerInput from "@/components/IntegerInput";
-import { formatDateInput, statusBadgeClass } from "@/lib/format";
+import { isStoreAdmin } from "@/lib/permissions";
+import { formatDateInput } from "@/lib/format";
 import { formatProductLabel } from "@/lib/productUnits";
+import { TxnBadge } from "@/components/TxnIcon";
+import { poStatusVisual } from "@/lib/transactionVisuals";
 import { parseInteger } from "@/lib/integerInput";
 import { api } from "@/lib/api";
 import { callableErrorMessage } from "@/lib/callableError";
+
+interface PoPrefill {
+  branchId: string;
+  requestIds: string[];
+  lines: { productId: string; expectedQty: number }[];
+}
 
 interface POItemForm {
   categoryId: string;
@@ -46,7 +56,9 @@ function emptyForm(): POForm {
 }
 
 export default function PurchaseOrders() {
-  const { storeId } = useAuth();
+  const { storeId, user } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -54,8 +66,14 @@ export default function PurchaseOrders() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState<POForm>(emptyForm());
+  const [fulfillRequestIds, setFulfillRequestIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<POStatus | "all">("all");
+  const [branchFilter, setBranchFilter] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [duplicatePrompt, setDuplicatePrompt] = useState<{
     existingPurchaseOrderId: string;
     poNumber: string;
@@ -80,6 +98,57 @@ export default function PurchaseOrders() {
         .sort((a, b) => a.label.localeCompare(b.label)),
     [categories],
   );
+
+  const supplierName = (id: string) => suppliers.find((s) => s.id === id)?.name ?? "";
+  const branchLabel = (id: string) => branches.find((b) => b.id === id)?.name ?? "";
+
+  const PO_STATUS_FILTERS: (POStatus | "all")[] = [
+    "all",
+    "DRAFT",
+    "ORDERED",
+    "IN_TRANSIT",
+    "PARTIALLY_RECEIVED",
+    "RECEIVED",
+    "COMPLETED",
+    "CANCELLED",
+  ];
+
+  const filteredOrders = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return orders.filter((o) => {
+      if (statusFilter !== "all" && o.status !== statusFilter) return false;
+      if (branchFilter && o.branchId !== branchFilter) return false;
+      // Date range is matched against the expected delivery date (YYYY-MM-DD strings sort lexicographically).
+      if (fromDate && o.expectedDeliveryDate < fromDate) return false;
+      if (toDate && o.expectedDeliveryDate > toDate) return false;
+      if (term) {
+        const haystack = [
+          o.poNumber,
+          o.supplierReferenceNumber,
+          supplierName(o.supplierId),
+          branchLabel(o.branchId),
+          o.notes,
+          o.expectedDeliveryDate,
+          o.status,
+          ...o.items.map((i) => i.productName),
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(term)) return false;
+      }
+      return true;
+    });
+  }, [orders, search, statusFilter, branchFilter, fromDate, toDate, suppliers, branches]);
+
+  const hasFilters = !!(search || statusFilter !== "all" || branchFilter || fromDate || toDate);
+  const clearFilters = () => {
+    setSearch("");
+    setStatusFilter("all");
+    setBranchFilter("");
+    setFromDate("");
+    setToDate("");
+  };
 
   const findLocalDuplicate = () =>
     orders.find(
@@ -108,17 +177,53 @@ export default function PurchaseOrders() {
   };
 
   useEffect(() => {
-    if (!storeId) return;
-    const u1 = onSnapshot(query(collection(db, "stores", storeId, "purchaseOrders"), orderBy("createdAt", "desc")), (snap) => {
-      setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as PurchaseOrder));
-      setLoading(false);
-    });
+    if (!storeId || !user) return;
+    const u1 = onSnapshot(
+      branchScopedQuery(collection(db, "stores", storeId, "purchaseOrders"), user),
+      (snap) => {
+        setOrders(
+          snap.docs
+            .map((d) => ({ id: d.id, ...d.data() }) as PurchaseOrder)
+            .sort((a, b) => b.createdAt - a.createdAt),
+        );
+        setLoading(false);
+      },
+    );
     const u2 = onSnapshot(collection(db, "stores", storeId, "suppliers"), (s) => setSuppliers(s.docs.map((d) => ({ id: d.id, ...d.data() }) as Supplier)));
     const u3 = onSnapshot(collection(db, "stores", storeId, "branches"), (s) => setBranches(s.docs.map((d) => ({ id: d.id, ...d.data() }) as Branch)));
     const u4 = onSnapshot(collection(db, "stores", storeId, "products"), (s) => setProducts(s.docs.map((d) => ({ id: d.id, ...d.data() }) as Product)));
     const u5 = onSnapshot(collection(db, "stores", storeId, "categories"), (s) => setCategories(s.docs.map((d) => ({ id: d.id, ...d.data() }) as Category)));
     return () => { u1(); u2(); u3(); u4(); u5(); };
-  }, [storeId]);
+  }, [storeId, user]);
+
+  useEffect(() => {
+    const state = location.state as { prefill?: PoPrefill; openCreate?: boolean } | null;
+    if (state?.openCreate) {
+      setForm(emptyForm());
+      setFulfillRequestIds([]);
+      setSaveNotice(null);
+      setSaveError(null);
+      setModalOpen(true);
+      navigate(location.pathname, { replace: true, state: null });
+      return;
+    }
+    const prefill = state?.prefill;
+    if (!prefill || products.length === 0) return;
+    const items = prefill.lines.map((l) => {
+      const product = products.find((p) => p.id === l.productId);
+      return {
+        categoryId: product?.categoryId ?? "",
+        productId: l.productId,
+        expectedQty: String(l.expectedQty),
+      };
+    });
+    setForm({ ...emptyForm(), branchId: prefill.branchId, items: items.length ? items : [emptyItem()] });
+    setFulfillRequestIds(prefill.requestIds ?? []);
+    setSaveNotice(null);
+    setSaveError(null);
+    setModalOpen(true);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.state, location.pathname, products, navigate]);
 
   const productsForCategory = (categoryId: string) =>
     activeProducts
@@ -135,6 +240,7 @@ export default function PurchaseOrders() {
 
   const openCreateModal = () => {
     setForm(emptyForm());
+    setFulfillRequestIds([]);
     setDuplicatePrompt(null);
     setSaveNotice(null);
     setSaveError(null);
@@ -158,6 +264,7 @@ export default function PurchaseOrders() {
     setDuplicatePrompt(null);
     setSaveError(null);
     setForm(emptyForm());
+    setFulfillRequestIds([]);
     if (message) setSaveNotice(message);
   };
 
@@ -210,6 +317,7 @@ export default function PurchaseOrders() {
         status: "ORDERED",
         allowDuplicate: options?.allowDuplicate,
         mergeIntoPurchaseOrderId: options?.mergeIntoPurchaseOrderId,
+        purchaseRequestIds: fulfillRequestIds.length ? fulfillRequestIds : undefined,
       });
       const data = result.data as {
         duplicate?: boolean;
@@ -267,28 +375,99 @@ export default function PurchaseOrders() {
     await api.updatePurchaseOrderStatus({ purchaseOrderId: id, status });
   };
 
+  const canManagePo = !!user && isStoreAdmin(user);
+
   if (loading) return <LoadingSpinner />;
 
   return (
     <div>
-      <PageHeader title="Purchase Orders" actions={<button onClick={openCreateModal} className="btn-primary"><Plus size={18} /> Create PO</button>} />
+      <PageHeader
+        title="Purchase Orders"
+        description={
+          canManagePo
+            ? undefined
+            : "Purchase orders are created by admins. Need stock? Raise a request from Activity & Approvals."
+        }
+        actions={
+          canManagePo ? (
+            <button onClick={openCreateModal} className="btn-primary">
+              <Plus size={18} /> Create PO
+            </button>
+          ) : undefined
+        }
+      />
       {saveNotice && (
         <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
           {saveNotice}
         </div>
       )}
-      <DataTable data={orders} keyField="id" columns={[
+
+      <div className="mb-4 flex flex-col gap-3">
+        <div className="relative">
+          <Search size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            className="input-field pl-10"
+            placeholder="Search PO #, supplier, branch, product, reference, notes…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            className="input-field min-w-[8.5rem] flex-1 sm:w-auto sm:flex-none"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as POStatus | "all")}
+          >
+            {PO_STATUS_FILTERS.map((s) => (
+              <option key={s} value={s}>
+                {s === "all" ? "All statuses" : s.replace(/_/g, " ")}
+              </option>
+            ))}
+          </select>
+          {user && isStoreWideAccess(user) && (
+            <select
+              className="input-field min-w-[8.5rem] flex-1 sm:w-auto sm:flex-none"
+              value={branchFilter}
+              onChange={(e) => setBranchFilter(e.target.value)}
+            >
+              <option value="">All branches</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          )}
+          <div className="flex w-full items-center gap-2 sm:w-auto">
+            <input type="date" className="input-field min-w-0 flex-1 sm:w-auto sm:flex-none" value={fromDate} onChange={(e) => setFromDate(e.target.value)} aria-label="Expected delivery from" />
+            <span className="shrink-0 text-sm text-slate-400">to</span>
+            <input type="date" className="input-field min-w-0 flex-1 sm:w-auto sm:flex-none" value={toDate} onChange={(e) => setToDate(e.target.value)} aria-label="Expected delivery to" />
+          </div>
+          {hasFilters && (
+            <button type="button" onClick={clearFilters} className="btn-secondary w-full sm:w-auto">
+              Clear
+            </button>
+          )}
+        </div>
+        <p className="text-xs text-slate-500">
+          Showing {filteredOrders.length} of {orders.length} purchase order{orders.length === 1 ? "" : "s"}
+          <span className="text-slate-400"> · date range filters by expected delivery</span>
+        </p>
+      </div>
+
+      <DataTable data={filteredOrders} keyField="id" columns={[
         { key: "po", header: "PO Number", sortValue: (o) => o.poNumber, render: (o) => <span className="font-medium">{o.poNumber}</span> },
         { key: "supplier", header: "Supplier", sortValue: (o) => suppliers.find((s) => s.id === o.supplierId)?.name ?? "", render: (o) => suppliers.find((s) => s.id === o.supplierId)?.name ?? "-" },
         { key: "branch", header: "Branch", sortValue: (o) => branches.find((b) => b.id === o.branchId)?.name ?? "", render: (o) => branches.find((b) => b.id === o.branchId)?.name ?? "-" },
         { key: "date", header: "Expected Delivery", sortValue: (o) => o.expectedDeliveryDate, render: (o) => o.expectedDeliveryDate },
         { key: "items", header: "Items", sortValue: (o) => o.items.length, render: (o) => o.items.length },
-        { key: "status", header: "Status", sortValue: (o) => o.status, render: (o) => <span className={statusBadgeClass(o.status)}>{o.status}</span> },
+        { key: "status", header: "Status", sortValue: (o) => o.status, render: (o) => <TxnBadge visual={poStatusVisual(o.status)} label={o.status.replace(/_/g, " ")} /> },
         { key: "actions", header: "", sortable: false, render: (o) => (
-          <div className="flex gap-2">
-            <Link to={`/deliveries/${o.id}`} className="text-brand-600 text-sm hover:underline">Receive</Link>
-            {o.status === "DRAFT" && <button onClick={() => updateStatus(o.id, "ORDERED")} className="text-sm text-slate-600 hover:underline">Order</button>}
-            {o.status === "ORDERED" && <button onClick={() => updateStatus(o.id, "IN_TRANSIT")} className="text-sm text-slate-600 hover:underline">In Transit</button>}
+          <div className="flex flex-wrap gap-2">
+            <Link to={`/deliveries/${o.id}`} className="text-brand-600 text-sm hover:underline">Track</Link>
+            {canManagePo && o.status === "DRAFT" && <button onClick={() => updateStatus(o.id, "ORDERED")} className="text-sm text-slate-600 hover:underline">Order</button>}
+            {canManagePo && o.status === "ORDERED" && <button onClick={() => updateStatus(o.id, "IN_TRANSIT")} className="text-sm text-slate-600 hover:underline">In Transit</button>}
+            {canManagePo && (o.status === "RECEIVED" || o.status === "PARTIALLY_RECEIVED") && (
+              <button onClick={() => updateStatus(o.id, "COMPLETED")} className="text-sm font-medium text-emerald-600 hover:underline">Complete</button>
+            )}
           </div>
         )},
       ]} />

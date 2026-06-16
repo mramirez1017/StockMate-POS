@@ -23,15 +23,20 @@ export default function DashboardStatCard({
     <Tag
       type={onClick ? "button" : undefined}
       onClick={onClick}
-      className={`dashboard-stat-card text-left ${onClick ? "cursor-pointer" : ""}`}
+      className={`dashboard-stat-card group text-left ${onClick ? "cursor-pointer hover:-translate-y-0.5 hover:border-brand-200" : ""}`}
     >
-      <div className={`dashboard-stat-icon ${iconBg}`}>
+      <div className={`dashboard-stat-icon transition-transform duration-200 group-hover:scale-110 ${iconBg}`}>
         <Icon size={20} strokeWidth={1.75} />
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-xs font-medium text-slate-500">{label}</p>
         <p className="mt-0.5 truncate text-lg font-bold text-slate-900 sm:mt-1 sm:text-xl">{value}</p>
-        {trend && <p className="mt-1 text-xs font-medium text-brand-600">{trend}</p>}
+        {trend && (
+          <p className="mt-1 flex items-center gap-1 text-xs font-medium text-brand-600">
+            <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-brand-500" />
+            {trend}
+          </p>
+        )}
       </div>
     </Tag>
   );

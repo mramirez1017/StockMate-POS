@@ -4,10 +4,15 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.Query
 import com.google.firebase.functions.FirebaseFunctions
 import com.stockmate.pos.data.models.*
 import com.stockmate.pos.util.NumberInput
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 
 class FirebaseRepository {
@@ -343,6 +348,130 @@ class FirebaseRepository {
         val map = result.data as? Map<*, *> ?: error("Invalid response")
         return CreatePurchaseRequestResult(purchaseRequestId = map["purchaseRequestId"] as? String ?: "")
     }
+
+    // ── Messaging ───────────────────────────────────────────────────────────
+
+    /**
+     * Live conversation anchored to a record (e.g. a delivery PO). Emits the
+     * thread id (once created) plus its messages, re-attaching the message
+     * listener whenever the underlying thread changes.
+     */
+    fun observeContextThread(
+        storeId: String,
+        contextType: String,
+        contextId: String,
+    ): Flow<ThreadSnapshot> = callbackFlow {
+        var messagesReg: ListenerRegistration? = null
+        val threadsCol = db.collection("stores").document(storeId).collection("threads")
+
+        val threadReg = threadsCol
+            .whereEqualTo("contextType", contextType)
+            .whereEqualTo("contextId", contextId)
+            .limit(1)
+            .addSnapshotListener { snap, _ ->
+                messagesReg?.remove()
+                messagesReg = null
+                val threadDoc = snap?.documents?.firstOrNull()
+                if (threadDoc == null) {
+                    trySend(ThreadSnapshot(null, emptyList()))
+                    return@addSnapshotListener
+                }
+                val threadId = threadDoc.id
+                messagesReg = threadsCol.document(threadId).collection("messages")
+                    .orderBy("createdAt")
+                    .addSnapshotListener { msgSnap, _ ->
+                        val messages = msgSnap?.documents
+                            ?.mapNotNull { parseThreadMessage(it.id, threadId, it.data ?: return@mapNotNull null) }
+                            ?.filter { !it.deleted }
+                            ?: emptyList()
+                        trySend(ThreadSnapshot(threadId, messages))
+                    }
+            }
+
+        awaitClose {
+            messagesReg?.remove()
+            threadReg.remove()
+        }
+    }
+
+    suspend fun sendMessage(
+        threadId: String?,
+        contextType: String,
+        contextId: String,
+        title: String,
+        branchId: String,
+        text: String,
+    ): String {
+        val data = hashMapOf<String, Any?>(
+            "contextType" to contextType,
+            "contextId" to contextId,
+            "title" to title,
+            "branchId" to branchId,
+            "text" to text,
+        )
+        threadId?.let { data["threadId"] = it }
+        val result = functions.getHttpsCallable("sendMessage").call(data).await()
+        val map = result.data as? Map<*, *>
+        return map?.get("threadId") as? String ?: threadId ?: ""
+    }
+
+    suspend fun markThreadRead(threadId: String) {
+        functions.getHttpsCallable("markThreadRead").call(mapOf("threadId" to threadId)).await()
+    }
+
+    // ── Notifications ─────────────────────────────────────────────────────────
+
+    fun observeNotifications(storeId: String, uid: String): Flow<List<StoreNotification>> = callbackFlow {
+        val reg = db.collection("stores").document(storeId).collection("notifications")
+            .whereEqualTo("recipientUid", uid)
+            .orderBy("createdAt", Query.Direction.DESCENDING)
+            .limit(50)
+            .addSnapshotListener { snap, _ ->
+                val list = snap?.documents
+                    ?.mapNotNull { parseNotification(it.id, it.data ?: return@mapNotNull null) }
+                    ?: emptyList()
+                trySend(list)
+            }
+        awaitClose { reg.remove() }
+    }
+
+    suspend fun markNotificationRead(notificationId: String) {
+        functions.getHttpsCallable("markNotificationRead")
+            .call(mapOf("notificationId" to notificationId)).await()
+    }
+
+    suspend fun markAllNotificationsRead() {
+        functions.getHttpsCallable("markAllNotificationsRead").call(emptyMap<String, Any>()).await()
+    }
+
+    private fun parseThreadMessage(id: String, threadId: String, data: Map<String, Any?>): ThreadMessage =
+        ThreadMessage(
+            id = id,
+            threadId = threadId,
+            senderId = data["senderId"] as? String ?: "",
+            senderName = data["senderName"] as? String ?: "",
+            senderRole = data["senderRole"] as? String ?: "",
+            text = data["text"] as? String ?: "",
+            deleted = data["deleted"] as? Boolean ?: false,
+            createdAt = (data["createdAt"] as? Number)?.toLong() ?: 0L,
+        )
+
+    private fun parseNotification(id: String, data: Map<String, Any?>): StoreNotification =
+        StoreNotification(
+            id = id,
+            recipientUid = data["recipientUid"] as? String ?: "",
+            branchId = data["branchId"] as? String,
+            kind = data["kind"] as? String ?: "",
+            title = data["title"] as? String ?: "",
+            body = data["body"] as? String ?: "",
+            link = data["link"] as? String,
+            refType = data["refType"] as? String,
+            refId = data["refId"] as? String,
+            threadId = data["threadId"] as? String,
+            read = data["read"] as? Boolean ?: false,
+            actorName = data["actorName"] as? String,
+            createdAt = (data["createdAt"] as? Number)?.toLong() ?: 0L,
+        )
 
     private suspend fun getInventoryStock(storeId: String, branchId: String, productId: String): Int {
         val id = inventoryDocId(branchId, productId)

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.stockmate.pos.data.FirebaseRepository
 import com.stockmate.pos.data.models.Product
 import com.stockmate.pos.data.models.User
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,11 +38,12 @@ class ProductSearchViewModel(
         searchJob = viewModelScope.launch {
             delay(300)
             _uiState.update { it.copy(isLoading = true, error = null) }
-            runCatching {
-                repository.searchProducts(user.storeId, user.branchId, _uiState.value.query)
-            }.onSuccess { products ->
+            try {
+                val products = repository.searchProducts(user.storeId, user.branchId, _uiState.value.query)
                 _uiState.update { it.copy(isLoading = false, products = products) }
-            }.onFailure { e ->
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
                 _uiState.update { it.copy(isLoading = false, error = e.message) }
             }
         }

@@ -16,6 +16,8 @@ import {
   refreshDashboardStats,
   updateCriticalStockForProduct,
 } from "../utils/stock";
+import { createNotifications } from "../utils/notify";
+import { logProcurementEvent } from "../utils/procurement";
 
 export const receiveDelivery = onCall(async (request) => {
   const { storeId, user, uid } = await resolveAuth(request);
@@ -134,6 +136,50 @@ export const receiveDelivery = onCall(async (request) => {
     await refreshDashboardStats(storeId);
   } catch (err) {
     console.error("refreshDashboardStats failed after receiveDelivery", err);
+  }
+
+  const totalDamaged = receiptItems.reduce((sum, i) => sum + (i.damagedQty ?? 0), 0);
+  const totalMissing = receiptItems.reduce((sum, i) => sum + i.missingQty, 0);
+  const hasDiscrepancy = totalDamaged > 0 || totalMissing > 0;
+  const fullyReceived = updatedPoItems.every((i) => (i.receivedQty ?? 0) >= i.expectedQty);
+  const statusWord = fullyReceived ? "fully received" : "partially received";
+  const discrepancyNote = hasDiscrepancy
+    ? ` — ${totalMissing} missing, ${totalDamaged} damaged.`
+    : ".";
+
+  try {
+    await logProcurementEvent({
+      storeId,
+      branchId: po.branchId,
+      type: hasDiscrepancy ? "DELIVERY_DISCREPANCY" : "DELIVERY_RECEIVED",
+      message: `${user.fullName} ${statusWord} ${po.poNumber}${discrepancyNote}`,
+      poId: purchaseOrderId,
+      poNumber: po.poNumber,
+      actor: user,
+      meta: { totalDamaged, totalMissing, fullyReceived },
+    });
+  } catch (err) {
+    console.error("logProcurementEvent failed after receiveDelivery", err);
+  }
+
+  try {
+    await createNotifications({
+      storeId,
+      kind: hasDiscrepancy ? "DELIVERY_DISCREPANCY" : "DELIVERY_RECEIVED",
+      title: `Delivery ${statusWord} · ${po.poNumber}`,
+      body: `${user.fullName} received ${po.poNumber}${discrepancyNote}`,
+      link: `/deliveries/${purchaseOrderId}`,
+      refType: "DELIVERY",
+      refId: purchaseOrderId,
+      branchId: po.branchId,
+      actorId: uid,
+      actorName: user.fullName,
+      toAdmins: true,
+      toBranch: po.branchId,
+      excludeUid: uid,
+    });
+  } catch (err) {
+    console.error("createNotifications failed after receiveDelivery", err);
   }
 
   return { deliveryReceiptId: receiptRef.id, items: receiptItems };

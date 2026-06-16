@@ -1,20 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { collection, onSnapshot, orderBy, getDoc, doc } from "firebase/firestore";
 import { db } from "@/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { BranchInventory, Product, StockMovement, Category } from "@stockmate/types";
 import PageHeader from "@/components/PageHeader";
 import DataTable from "@/components/DataTable";
-import Modal from "@/components/Modal";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import BranchFilter from "@/components/BranchFilter";
-import IntegerInput from "@/components/IntegerInput";
-import { api } from "@/lib/api";
-import { parseSignedInteger } from "@/lib/integerInput";
 import { branchScopedQuery, isStoreWideAccess } from "@/lib/branchScope";
 import { statusBadgeClass, stockStatus } from "@/lib/format";
 import { formatProductLabel, formatProductMeasure, productSearchText } from "@/lib/productUnits";
 import { branchName, useBranches } from "@/lib/useBranches";
+import { ProgressBar } from "@/components/Charts";
+import { TxnBadge } from "@/components/TxnIcon";
+import { movementVisual } from "@/lib/transactionVisuals";
 
 function inventoryRowSearchText(
   item: BranchInventory & { product?: Product },
@@ -43,14 +43,13 @@ function inventoryRowSearchText(
 export default function Inventory() {
   const { storeId, user } = useAuth();
   const { branches } = useBranches(storeId);
+  const navigate = useNavigate();
   const [inventory, setInventory] = useState<(BranchInventory & { product?: Product })[]>([]);
   const [categories, setCategories] = useState<Map<string, string>>(new Map());
   const [movements, setMovements] = useState<StockMovement[]>([]);
   const [filter, setFilter] = useState<"all" | "low" | "critical">("all");
   const [search, setSearch] = useState("");
   const [branchFilter, setBranchFilter] = useState("");
-  const [adjModal, setAdjModal] = useState(false);
-  const [adjForm, setAdjForm] = useState({ productId: "", quantityChange: "", reason: "" });
   const [loading, setLoading] = useState(true);
 
   const showBranchColumn = user ? isStoreWideAccess(user) : false;
@@ -108,21 +107,6 @@ export default function Inventory() {
     });
   }, [inventory, effectiveBranchId, search, filter, branches, categories]);
 
-  const adjustmentBranchId = effectiveBranchId || user?.branchId || "";
-  const adjustmentProducts = inventory.filter((i) => !effectiveBranchId || i.branchId === effectiveBranchId);
-
-  const handleAdjustment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user || !adjustmentBranchId) return;
-    await api.createStockAdjustment({
-      branchId: adjustmentBranchId,
-      productId: adjForm.productId,
-      quantityChange: parseSignedInteger(adjForm.quantityChange, 0),
-      reason: adjForm.reason,
-    });
-    setAdjModal(false);
-  };
-
   if (loading || !user) return <LoadingSpinner />;
 
   return (
@@ -131,8 +115,8 @@ export default function Inventory() {
         title="Inventory"
         description="Stock levels are tracked per branch. Each branch has its own quantity, reorder level, and critical level."
         actions={
-          <button onClick={() => setAdjModal(true)} className="btn-secondary" disabled={!adjustmentBranchId}>
-            Request Adjustment
+          <button onClick={() => navigate("/stock-adjustments", { state: { openCreate: true } })} className="btn-secondary">
+            Adjust Stock
           </button>
         }
       />
@@ -199,11 +183,18 @@ export default function Inventory() {
             key: "stock",
             header: "Current Stock",
             sortValue: (i) => i.currentStock,
-            render: (i) => (
-              <span className={i.currentStock <= i.criticalLevel ? "font-semibold text-red-600" : "font-medium"}>
-                {i.currentStock}
-              </span>
-            ),
+            render: (i) => {
+              const tone = i.currentStock <= i.criticalLevel ? "danger" : i.currentStock <= i.reorderLevel ? "warn" : "ok";
+              const max = Math.max(i.reorderLevel * 1.5, i.currentStock, 1);
+              return (
+                <div className="min-w-[7rem]">
+                  <span className={i.currentStock <= i.criticalLevel ? "font-semibold text-red-600" : "font-medium"}>
+                    {i.currentStock}
+                  </span>
+                  <ProgressBar value={i.currentStock} max={max} tone={tone} size="sm" className="mt-1" />
+                </div>
+              );
+            },
           },
           { key: "reorder", header: "Reorder Level", sortValue: (i) => i.reorderLevel, render: (i) => i.reorderLevel },
           { key: "critical", header: "Critical Level", sortValue: (i) => i.criticalLevel, render: (i) => i.criticalLevel },
@@ -219,7 +210,12 @@ export default function Inventory() {
           ...(showBranchColumn
             ? [{ key: "branch", header: "Branch", sortValue: (m: StockMovement) => branchName(branches, m.branchId), render: (m: StockMovement) => branchName(branches, m.branchId) }]
             : []),
-          { key: "type", header: "Type", sortValue: (m) => m.type, render: (m) => m.type },
+          {
+            key: "type",
+            header: "Type",
+            sortValue: (m) => m.type,
+            render: (m) => <TxnBadge visual={movementVisual(m.type)} label={m.type.replace(/_/g, " ")} />,
+          },
           { key: "product", header: "Product", sortValue: (m) => m.productName ?? m.productId, render: (m) => m.productName ?? m.productId },
           {
             key: "change",
@@ -236,59 +232,6 @@ export default function Inventory() {
           { key: "date", header: "Date", sortValue: (m) => m.createdAt, render: (m) => new Date(m.createdAt).toLocaleString() },
         ]}
       />
-
-      <Modal open={adjModal} onClose={() => setAdjModal(false)} title="Stock Adjustment Request">
-        <form onSubmit={handleAdjustment} className="space-y-4">
-          {showBranchColumn && (
-            <p className="text-sm text-slate-500">
-              Branch: <strong>{branchName(branches, adjustmentBranchId)}</strong>
-              {!branchFilter && " — select a branch in the filter above first"}
-            </p>
-          )}
-          <div>
-            <label className="mb-1 block text-sm font-medium">Product</label>
-            <select
-              className="input-field"
-              required
-              value={adjForm.productId}
-              onChange={(e) => setAdjForm({ ...adjForm, productId: e.target.value })}
-            >
-              <option value="">Select...</option>
-              {adjustmentProducts.map((i) => (
-                <option key={i.id} value={i.productId}>
-                  {i.product ? formatProductLabel(i.product) : i.productId}
-                  {showBranchColumn ? ` (${branchName(branches, i.branchId)})` : ""}
-                </option>
-              ))}
-            </select>
-          </div>
-          <IntegerInput
-            label="Quantity Change (+/-)"
-            value={adjForm.quantityChange}
-            onChange={(quantityChange) => setAdjForm({ ...adjForm, quantityChange })}
-            placeholder="e.g. 10 or -5"
-            allowNegative
-            required
-          />
-          <div>
-            <label className="mb-1 block text-sm font-medium">Reason</label>
-            <input
-              className="input-field"
-              required
-              value={adjForm.reason}
-              onChange={(e) => setAdjForm({ ...adjForm, reason: e.target.value })}
-            />
-          </div>
-          <div className="form-actions">
-            <button type="button" onClick={() => setAdjModal(false)} className="btn-secondary">
-              Cancel
-            </button>
-            <button type="submit" className="btn-primary" disabled={!adjustmentBranchId}>
-              Submit
-            </button>
-          </div>
-        </form>
-      </Modal>
     </div>
   );
 }

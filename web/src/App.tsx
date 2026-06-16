@@ -13,6 +13,7 @@ import PurchaseOrders from "@/pages/PurchaseOrders";
 import UpcomingDeliveries from "@/pages/UpcomingDeliveries";
 import DeliveryChecklist from "@/pages/DeliveryChecklist";
 import Inventory from "@/pages/Inventory";
+import StockAdjustments from "@/pages/StockAdjustments";
 import StockDisposal from "@/pages/StockDisposal";
 import Promos from "@/pages/Promos";
 import Sales from "@/pages/Sales";
@@ -22,6 +23,8 @@ import Branches from "@/pages/Branches";
 import Settings from "@/pages/Settings";
 import Stores from "@/pages/Stores";
 import Analytics from "@/pages/Analytics";
+import Activity from "@/pages/Activity";
+import RequestDetail from "@/pages/RequestDetail";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { hasAccess, loading } = useAuth();
@@ -55,8 +58,11 @@ function AppRoutes() {
         <Route path="deliveries" element={<StoreStaffRoute><UpcomingDeliveries /></StoreStaffRoute>} />
         <Route path="deliveries/:poId" element={<StoreStaffRoute><DeliveryChecklist /></StoreStaffRoute>} />
         <Route path="inventory" element={<StoreStaffRoute><Inventory /></StoreStaffRoute>} />
+        <Route path="stock-adjustments" element={<StoreStaffRoute><StockAdjustments /></StoreStaffRoute>} />
         <Route path="disposal" element={<StoreStaffRoute><StockDisposal /></StoreStaffRoute>} />
         <Route path="promos" element={<StoreStaffRoute><Promos /></StoreStaffRoute>} />
+        <Route path="activity" element={<StoreStaffRoute><Activity /></StoreStaffRoute>} />
+        <Route path="requests/:requestId" element={<StoreStaffRoute><RequestDetail /></StoreStaffRoute>} />
         <Route path="sales" element={<StoreStaffRoute><Sales /></StoreStaffRoute>} />
         <Route path="reports" element={<StoreStaffRoute><Reports /></StoreStaffRoute>} />
         <Route path="branches" element={<StoreStaffRoute><Branches /></StoreStaffRoute>} />

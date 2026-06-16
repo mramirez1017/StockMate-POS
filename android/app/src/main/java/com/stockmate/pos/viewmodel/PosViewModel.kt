@@ -5,6 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.stockmate.pos.data.FirebaseRepository
 import com.stockmate.pos.data.models.*
 import com.stockmate.pos.util.PosCheckout
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,6 +18,11 @@ data class PosUiState(
     val cart: List<CartItem> = emptyList(),
     val isCheckingOut: Boolean = false,
     val barcodeInput: String = "",
+    val searchQuery: String = "",
+    val searchResults: List<Product> = emptyList(),
+    val isSearching: Boolean = false,
+    val scannerVisible: Boolean = false,
+    val addedNotice: String? = null,
     val paymentMethod: String = "CASH",
     val pwdOrSenior: Boolean = false,
     val amountTendered: String = "",
@@ -35,6 +43,7 @@ class PosViewModel(
 
     private val _uiState = MutableStateFlow(PosUiState())
     val uiState: StateFlow<PosUiState> = _uiState.asStateFlow()
+    private var searchJob: Job? = null
 
     fun addProduct(product: Product) {
         _uiState.update { state ->
@@ -48,6 +57,56 @@ class PosViewModel(
             }
             state.copy(cart = newCart, error = null)
         }
+    }
+
+    /** Add a product chosen from inline search, then clear the search field. */
+    fun addFromSearch(product: Product) {
+        addProduct(product)
+        searchJob?.cancel()
+        _uiState.update {
+            it.copy(
+                searchQuery = "",
+                searchResults = emptyList(),
+                isSearching = false,
+                addedNotice = "Added ${product.name}",
+            )
+        }
+    }
+
+    fun setSearchQuery(user: User, query: String) {
+        _uiState.update { it.copy(searchQuery = query, addedNotice = null) }
+        searchJob?.cancel()
+        if (query.isBlank()) {
+            _uiState.update { it.copy(searchResults = emptyList(), isSearching = false) }
+            return
+        }
+        searchJob = viewModelScope.launch {
+            delay(250)
+            _uiState.update { it.copy(isSearching = true, error = null) }
+            try {
+                val products = repository.searchProducts(user.storeId, user.branchId, query)
+                _uiState.update { it.copy(isSearching = false, searchResults = products) }
+            } catch (e: CancellationException) {
+                throw e // a newer keystroke cancelled this search — not an error
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isSearching = false, error = e.message) }
+            }
+        }
+    }
+
+    fun clearSearch() {
+        searchJob?.cancel()
+        _uiState.update {
+            it.copy(searchQuery = "", searchResults = emptyList(), isSearching = false)
+        }
+    }
+
+    fun toggleScanner() {
+        _uiState.update { it.copy(scannerVisible = !it.scannerVisible, error = null) }
+    }
+
+    fun dismissAddedNotice() {
+        _uiState.update { it.copy(addedNotice = null) }
     }
 
     fun updateQuantity(productId: String, quantity: Int) {
@@ -117,7 +176,7 @@ class PosViewModel(
             }.onSuccess { product ->
                 if (product != null) {
                     addProduct(product)
-                    _uiState.update { it.copy(barcodeInput = "", error = null) }
+                    _uiState.update { it.copy(barcodeInput = "", error = null, addedNotice = "Added ${product.name}") }
                 } else {
                     _uiState.update { it.copy(error = "Product not found for barcode: $barcode") }
                 }

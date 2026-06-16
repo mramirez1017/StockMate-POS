@@ -4,7 +4,7 @@ import { resolveAuth, requireAdmin, requirePosAccess, canChangePrice } from "../
 import { collection, generateInternalBarcode, now, stripUndefined } from "../utils/firestore";
 import { alreadyExists, invalidArgument, notFound } from "../utils/errors";
 import { createAuditLogEntry } from "../audit";
-import { getOrCreateInventory } from "../utils/stock";
+import { getOrCreateInventory, updateCriticalStockForProduct } from "../utils/stock";
 import { recordInitialStockMovement } from "./initialStock";
 
 type CreateProductInput = Partial<Product> & {
@@ -65,6 +65,7 @@ export const createProduct = onCall(async (request) => {
   for (const branch of branches.docs) {
     const stock = branch.id === data.branchId ? initialStock : 0;
     await getOrCreateInventory(storeId, branch.id, fullProduct, stock);
+    await updateCriticalStockForProduct(storeId, branch.id, ref.id);
   }
 
   if (initialStock > 0) {

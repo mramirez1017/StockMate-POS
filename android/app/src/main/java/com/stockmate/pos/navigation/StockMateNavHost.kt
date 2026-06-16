@@ -1,6 +1,7 @@
 package com.stockmate.pos.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -25,6 +26,13 @@ fun StockMateNavHost(
     val disposalViewModel: DisposalViewModel = viewModel()
     val criticalStockViewModel: CriticalStockViewModel = viewModel()
     val receiptViewModel: ReceiptViewModel = viewModel()
+    val notificationsViewModel: NotificationsViewModel = viewModel()
+    val threadViewModel: ThreadViewModel = viewModel()
+
+    LaunchedEffect(user.id) {
+        notificationsViewModel.start(user.storeId, user.id)
+    }
+    val notifState by notificationsViewModel.uiState.collectAsState()
 
     NavHost(
         navController = navController,
@@ -36,8 +44,48 @@ fun StockMateNavHost(
                 user = user,
                 storeName = storeName,
                 viewModel = homeViewModel,
+                unreadCount = notifState.unreadCount,
+                onOpenNotifications = { navController.navigate(NavRoutes.NOTIFICATIONS) },
                 onNavigate = { route -> navController.navigate(route) },
                 onSignOut = onSignOut,
+            )
+        }
+
+        composable(NavRoutes.NOTIFICATIONS) {
+            NotificationsScreen(
+                user = user,
+                viewModel = notificationsViewModel,
+                onOpen = { notification ->
+                    val type = notification.refType
+                    val id = notification.refId
+                    if ((type == "PURCHASE_ORDER" || type == "DELIVERY") && !id.isNullOrBlank()) {
+                        navController.navigate(NavRoutes.deliveryChecklist(id))
+                    }
+                },
+                onBack = { navController.popBackStack() },
+            )
+        }
+
+        composable(
+            route = NavRoutes.MESSAGES,
+            arguments = listOf(navArgument("poId") { type = NavType.StringType }),
+        ) { backStackEntry ->
+            val poId = backStackEntry.arguments?.getString("poId") ?: return@composable
+            val deliveryState by deliveryViewModel.uiState.collectAsState()
+            LaunchedEffect(poId) {
+                if (deliveryViewModel.uiState.value.selectedPo?.id != poId) {
+                    deliveryViewModel.selectPurchaseOrder(user, poId)
+                }
+            }
+            val po = deliveryState.selectedPo?.takeIf { it.id == poId }
+            MessageThreadScreen(
+                user = user,
+                contextType = "PURCHASE_ORDER",
+                contextId = poId,
+                title = po?.let { "Delivery ${it.poNumber}" } ?: "Delivery chat",
+                branchId = po?.branchId ?: user.branchId,
+                viewModel = threadViewModel,
+                onBack = { navController.popBackStack() },
             )
         }
 
@@ -90,6 +138,7 @@ fun StockMateNavHost(
                 user = user,
                 poId = poId,
                 viewModel = deliveryViewModel,
+                onOpenChat = { navController.navigate(NavRoutes.messages(poId)) },
                 onSubmitted = {
                     navController.popBackStack(NavRoutes.RECEIVE_DELIVERY, inclusive = false)
                 },

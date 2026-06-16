@@ -11,6 +11,7 @@ import {
   Trash2,
   Search,
   BarChart3,
+  Wallet,
 } from "lucide-react";
 import {
   LineChart,
@@ -20,17 +21,13 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Legend,
 } from "recharts";
+import { DonutChart, StockLevelBar } from "@/components/Charts";
 import { onSnapshot, collection, orderBy, where, getDocs } from "firebase/firestore";
 import { db } from "@/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   Sale,
-  CriticalStock,
   BranchInventory,
   Product,
   Category,
@@ -44,8 +41,11 @@ import QuickActionTile from "@/components/QuickActionTile";
 import Modal from "@/components/Modal";
 import TableScroll from "@/components/TableScroll";
 import { formatCurrency, formatDate, statusBadgeClass } from "@/lib/format";
-import { canViewProfit, isManagerOrAbove } from "@/lib/permissions";
+import { canViewProfit, canViewSupplierCost, isManagerOrAbove } from "@/lib/permissions";
 import { branchScopedQuery } from "@/lib/branchScope";
+import DateRangeBar, { EMPTY_RANGE, isWithinRange, rangeLabel, type DateRange } from "@/components/DateRangeBar";
+import { StatTile, InDemandTile, TopRankedTile } from "@/components/AnalyticsTiles";
+import { computeSalesAnalytics, type ProductCostInfo } from "@/lib/salesAnalytics";
 import { api } from "@/lib/api";
 
 function isActiveSale(s: Sale): boolean {
@@ -84,16 +84,18 @@ export default function Dashboard() {
   const { storeId, user } = useAuth();
   const [todaySales, setTodaySales] = useState<Sale[]>([]);
   const [weekSales, setWeekSales] = useState<Sale[]>([]);
-  const [criticalStocks, setCriticalStocks] = useState<CriticalStock[]>([]);
   const [inventory, setInventory] = useState<BranchInventory[]>([]);
   const [products, setProducts] = useState<Map<string, Product>>(new Map());
   const [categories, setCategories] = useState<Map<string, Category>>(new Map());
   const [pendingPOs, setPendingPOs] = useState<PurchaseOrder[]>([]);
   const [disposals, setDisposals] = useState<Disposal[]>([]);
+  const [allSales, setAllSales] = useState<Sale[]>([]);
+  const [perfRange, setPerfRange] = useState<DateRange>(EMPTY_RANGE);
   const [loading, setLoading] = useState(true);
   const [activeModal, setActiveModal] = useState<ModalType>(null);
 
   const showProfit = user && canViewProfit(user);
+  const showCapital = user && canViewSupplierCost(user);
 
   useEffect(() => {
     if (!storeId || !user) return;
@@ -121,10 +123,6 @@ export default function Dashboard() {
           orderBy("createdAt", "desc")
         ),
         (snap) => setWeekSales(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Sale))
-      ),
-      onSnapshot(
-        branchScopedQuery(collection(db, "stores", storeId, "criticalStocks"), user),
-        (snap) => setCriticalStocks(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as CriticalStock))
       ),
       onSnapshot(
         branchScopedQuery(collection(db, "stores", storeId, "branchInventory"), user),
@@ -169,23 +167,76 @@ export default function Dashboard() {
     });
   }, [storeId, user]);
 
+  // Branch-scoped sales history powering the date-range performance panel.
+  useEffect(() => {
+    if (!storeId || !user) return;
+    const unsub = onSnapshot(
+      branchScopedQuery(collection(db, "stores", storeId, "sales"), user),
+      (snap) => setAllSales(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Sale)),
+      () => undefined,
+    );
+    return () => unsub();
+  }, [storeId, user]);
+
+  const perfAnalytics = useMemo(() => {
+    const costMap = new Map<string, ProductCostInfo>();
+    products.forEach((p, id) =>
+      costMap.set(id, { name: p.name, supplierCost: p.supplierCost, categoryId: p.categoryId }),
+    );
+    const catNames = new Map<string, string>();
+    categories.forEach((c, id) => catNames.set(id, c.name));
+    const inRange = allSales.filter((s) => isWithinRange(s.createdAt, perfRange));
+    return computeSalesAnalytics(inRange, costMap, catNames);
+  }, [allSales, perfRange, products, categories]);
+
   const getCategoryName = (productId: string) => {
     const product = products.get(productId);
     if (!product) return "—";
     return categories.get(product.categoryId)?.name ?? "Uncategorized";
   };
 
+  const criticalItems = useMemo(
+    () =>
+      inventory
+        .filter((i) => i.currentStock <= i.criticalLevel)
+        .map((i) => {
+          const product = products.get(i.productId);
+          return {
+            id: i.id,
+            productId: i.productId,
+            productName: product?.name ?? i.productId,
+            currentStock: i.currentStock,
+            criticalLevel: i.criticalLevel,
+          };
+        })
+        .sort((a, b) => a.currentStock - b.currentStock),
+    [inventory, products]
+  );
+
   const criticalRows: StockRow[] = useMemo(
     () =>
-      criticalStocks.map((item) => ({
+      criticalItems.map((item) => ({
         category: getCategoryName(item.productId),
         product: item.productName,
         stock: item.currentStock,
         threshold: item.criticalLevel,
         unit: products.get(item.productId)?.unit,
       })),
-    [criticalStocks, products, categories]
+    [criticalItems, products, categories]
   );
+
+  const inventoryHealth = useMemo(() => {
+    let healthy = 0;
+    let low = 0;
+    let out = 0;
+    for (const i of inventory) {
+      if (i.currentStock <= i.criticalLevel) out += 1;
+      else if (i.currentStock <= i.reorderLevel) low += 1;
+      else healthy += 1;
+    }
+    const total = inventory.length || 1;
+    return { healthy, low, out, total };
+  }, [inventory]);
 
   const lowStockRows: StockRow[] = useMemo(
     () =>
@@ -392,7 +443,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-5">
+      <div className="stagger-children grid grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-5">
         <DashboardStatCard
           label="Today's Sales"
           value={formatCurrency(todayRevenue)}
@@ -431,7 +482,34 @@ export default function Dashboard() {
         />
       </div>
 
-      <div className="grid gap-3 sm:gap-4 xl:grid-cols-12">
+      <div className="card animate-slide-up">
+        <div className="mb-4 flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="section-heading">Period performance</h2>
+            <p className="text-xs text-slate-500">Showing {rangeLabel(perfRange)}</p>
+          </div>
+          <DateRangeBar value={perfRange} onChange={setPerfRange} className="sm:items-end" />
+        </div>
+
+        <div className="stagger-children grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <StatTile icon={PhilippinePeso} tint="bg-emerald-100 text-emerald-600" label="Revenue" value={formatCurrency(perfAnalytics.revenue)} />
+          {showProfit && (
+            <StatTile icon={TrendingUp} tint="bg-amber-100 text-amber-600" label="Gross profit" value={formatCurrency(perfAnalytics.profit)} />
+          )}
+          {showCapital && (
+            <StatTile icon={Wallet} tint="bg-violet-100 text-violet-600" label="Capital (COGS)" value={formatCurrency(perfAnalytics.capital)} />
+          )}
+          <StatTile icon={ShoppingBag} tint="bg-sky-100 text-sky-600" label="Transactions" value={String(perfAnalytics.transactions)} />
+          <StatTile icon={Package} tint="bg-rose-100 text-rose-600" label="Items sold" value={String(perfAnalytics.itemsSold)} />
+        </div>
+
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <TopRankedTile label="Top 3 in-demand products" items={perfAnalytics.productRanking} />
+          <InDemandTile label="In-demand category" item={perfAnalytics.topCategory} />
+        </div>
+      </div>
+
+      <div className="stagger-children grid gap-3 sm:gap-4 xl:grid-cols-12">
         <div className="card xl:col-span-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="section-heading">Sales Overview</h2>
@@ -456,16 +534,21 @@ export default function Dashboard() {
 
         <div className="card xl:col-span-4">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="section-heading">Critical Stocks</h2>
+            <h2 className="section-heading">Inventory Health</h2>
             <button type="button" onClick={() => setActiveModal("critical")} className="text-xs font-semibold text-brand-600">
               View all
             </button>
           </div>
-          {criticalStocks.length === 0 ? (
+          <div className="mb-4 space-y-2.5 rounded-xl border border-slate-100 bg-slate-50/60 p-3">
+            <StockLevelBar label="In stock" value={inventoryHealth.healthy} ratio={inventoryHealth.healthy / inventoryHealth.total} tone="ok" />
+            <StockLevelBar label="Low stock" value={inventoryHealth.low} ratio={inventoryHealth.low / inventoryHealth.total} tone="warn" />
+            <StockLevelBar label="Out of stock" value={inventoryHealth.out} ratio={inventoryHealth.out / inventoryHealth.total} tone="danger" />
+          </div>
+          {criticalItems.length === 0 ? (
             <p className="py-8 text-center text-sm text-brand-600">All stocks healthy</p>
           ) : (
             <ul className="max-h-56 space-y-3 overflow-y-auto">
-              {criticalStocks.slice(0, 6).map((item) => (
+              {criticalItems.slice(0, 6).map((item) => (
                 <li key={item.id} className="flex items-center gap-3">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-bold text-slate-500">
                     {item.productName.slice(0, 2).toUpperCase()}
@@ -509,7 +592,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid gap-3 sm:gap-4 xl:grid-cols-3">
+      <div className="stagger-children grid gap-3 sm:gap-4 xl:grid-cols-3">
         <div className="card">
           <h2 className="section-heading mb-4">Top Selling Products</h2>
           {topProducts.length === 0 ? (
@@ -580,26 +663,12 @@ export default function Dashboard() {
 
         <div className="card">
           <h2 className="section-heading mb-4">Stock Disposal (This Month)</h2>
-          <div className="h-48">
-            {disposalChartData.length === 0 ? (
-              <div className="flex h-full items-center justify-center text-sm text-slate-500">No disposals recorded</div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={disposalChartData} cx="50%" cy="50%" innerRadius={45} outerRadius={65} dataKey="value">
-                    {disposalChartData.map((entry, i) => (
-                      <Cell key={i} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <text x="50%" y="50%" textAnchor="middle" dominantBaseline="middle" className="fill-slate-900 text-lg font-bold">
-                    {disposalTotal}
-                  </text>
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            )}
-          </div>
+          <DonutChart
+            data={disposalChartData}
+            centerLabel={disposalTotal}
+            centerCaption="units"
+            height={192}
+          />
         </div>
       </div>
 

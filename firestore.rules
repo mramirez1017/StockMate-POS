@@ -127,8 +127,14 @@ service cloud.firestore {
 
       match /purchaseRequests/{requestId} {
         allow read: if isStoreUser(storeId) || isPlatformOwner();
-        allow create: if isManagerOrAbove(storeId) || isPlatformOwner();
+        // Requests are created via the createPurchaseRequest callable (admin SDK).
+        allow create: if isStoreUser(storeId) || isPlatformOwner();
         allow update: if isAdmin(storeId) || isPlatformOwner();
+      }
+
+      match /procurementEvents/{eventId} {
+        allow read: if isStoreUser(storeId) || isPlatformOwner();
+        allow write: if false;
       }
 
       match /deliveryReceipts/{deliveryId} {
@@ -137,6 +143,13 @@ service cloud.firestore {
       }
 
       match /saleVoidRequests/{requestId} {
+        allow read: if isStoreUser(storeId) || isPlatformOwner();
+        allow write: if false;
+      }
+
+      // Branch staff request elevated permissions; admins review them.
+      // All writes go through the permission-request callables (admin SDK).
+      match /permissionRequests/{requestId} {
         allow read: if isStoreUser(storeId) || isPlatformOwner();
         allow write: if false;
       }
@@ -185,6 +198,32 @@ service cloud.firestore {
 
       match /dailyReports/{reportId} {
         allow read: if isManagerOrAbove(storeId) || isPlatformOwner();
+        allow write: if false;
+      }
+
+      // Conversations between staff (admin ↔ manager ↔ cashier). Writes go
+      // through Cloud Functions; clients only read in real time.
+      match /threads/{threadId} {
+        allow read: if isAdmin(storeId)
+          || isPlatformOwner()
+          || (isStoreUser(storeId) && resource.data.branchId == userBranch(storeId))
+          || (isStoreUser(storeId) && request.auth.uid in resource.data.participantUids);
+        allow write: if false;
+
+        match /messages/{messageId} {
+          allow read: if isAdmin(storeId)
+            || isPlatformOwner()
+            || (isStoreUser(storeId) && (
+                  get(/databases/$(database)/documents/stores/$(storeId)/threads/$(threadId)).data.branchId == userBranch(storeId)
+                  || request.auth.uid in get(/databases/$(database)/documents/stores/$(storeId)/threads/$(threadId)).data.participantUids
+               ));
+          allow write: if false;
+        }
+      }
+
+      // Per-recipient in-app notifications. Written by Cloud Functions only.
+      match /notifications/{notificationId} {
+        allow read: if isStoreUser(storeId) && resource.data.recipientUid == request.auth.uid;
         allow write: if false;
       }
     }

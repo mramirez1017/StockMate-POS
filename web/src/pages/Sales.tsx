@@ -1,14 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
-import { collection, onSnapshot, orderBy, where } from "firebase/firestore";
+import { collection, getDocs, onSnapshot, orderBy, where } from "firebase/firestore";
+import { Receipt, Package, Wallet, TrendingUp, PhilippinePeso } from "lucide-react";
 import { db } from "@/firebase";
 import { useAuth } from "@/contexts/AuthContext";
-import { Sale, SaleVoidRequest } from "@stockmate/types";
+import { Sale, SaleVoidRequest, Product, Category } from "@stockmate/types";
 import PageHeader from "@/components/PageHeader";
 import DataTable from "@/components/DataTable";
 import Modal from "@/components/Modal";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import DateRangeBar, { EMPTY_RANGE, isWithinRange, rangeLabel, type DateRange } from "@/components/DateRangeBar";
+import { StatTile, InDemandTile, TopRankedTile } from "@/components/AnalyticsTiles";
 import { formatCurrency, formatDate, statusBadgeClass } from "@/lib/format";
-import { canApproveVoidSale, canRequestVoidSale, isManagerOrAbove } from "@/lib/permissions";
+import { canApproveVoidSale, canRequestVoidSale, canViewProfit, canViewSupplierCost, isManagerOrAbove } from "@/lib/permissions";
+import { computeSalesAnalytics, type ProductCostInfo } from "@/lib/salesAnalytics";
 import { api } from "@/lib/api";
 import { callableErrorMessage } from "@/lib/callableError";
 import { branchScopedQuery } from "@/lib/branchScope";
@@ -31,7 +35,28 @@ export default function Sales() {
   const [voidSubmitting, setVoidSubmitting] = useState(false);
   const [voidError, setVoidError] = useState<string | null>(null);
   const [filter, setFilter] = useState<SalesFilter>("active");
+  const [range, setRange] = useState<DateRange>(EMPTY_RANGE);
+  const [productMap, setProductMap] = useState<Map<string, ProductCostInfo>>(new Map());
+  const [categoryNames, setCategoryNames] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!storeId) return;
+    Promise.all([
+      getDocs(collection(db, "stores", storeId, "products")),
+      getDocs(collection(db, "stores", storeId, "categories")),
+    ]).then(([prodSnap, catSnap]) => {
+      const pMap = new Map<string, ProductCostInfo>();
+      prodSnap.docs.forEach((d) => {
+        const p = d.data() as Product;
+        pMap.set(d.id, { name: p.name, supplierCost: p.supplierCost, categoryId: p.categoryId });
+      });
+      setProductMap(pMap);
+      const cMap = new Map<string, string>();
+      catSnap.docs.forEach((d) => cMap.set(d.id, (d.data() as Category).name));
+      setCategoryNames(cMap);
+    });
+  }, [storeId]);
 
   useEffect(() => {
     if (!storeId || !user) return;
@@ -69,14 +94,24 @@ export default function Sales() {
     return map;
   }, [voidRequests]);
 
+  const salesInRange = useMemo(
+    () => sales.filter((s) => isWithinRange(s.createdAt, range)),
+    [sales, range],
+  );
+
+  const analytics = useMemo(
+    () => computeSalesAnalytics(salesInRange, productMap, categoryNames),
+    [salesInRange, productMap, categoryNames],
+  );
+
   const filteredSales = useMemo(() => {
-    return sales.filter((sale) => {
+    return salesInRange.filter((sale) => {
       if (filter === "active") return sale.status === "COMPLETED" && !sale.pendingVoidRequestId;
       if (filter === "void_pending") return sale.status === "COMPLETED" && !!sale.pendingVoidRequestId;
       if (filter === "voided") return sale.status === "VOIDED";
       return true;
     });
-  }, [sales, filter]);
+  }, [salesInRange, filter]);
 
   const openVoidModal = (sale: Sale) => {
     setSelected(sale);
@@ -130,9 +165,42 @@ export default function Sales() {
 
   const manager = user && isManagerOrAbove(user);
 
+  const showCapital = !!user && canViewSupplierCost(user);
+  const showProfit = !!user && canViewProfit(user);
+
   return (
     <div>
       <PageHeader title="Sales" description="View and manage sales transactions" />
+
+      <div className="card mb-4 animate-slide-up">
+        <div className="mb-4 flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="section-heading">Performance</h2>
+            <p className="text-xs text-slate-500">Showing {rangeLabel(range)}</p>
+          </div>
+          <DateRangeBar value={range} onChange={setRange} className="sm:items-end" />
+        </div>
+
+        <div className="stagger-children grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <StatTile icon={PhilippinePeso} tint="bg-emerald-100 text-emerald-600" label="Revenue" value={formatCurrency(analytics.revenue)} />
+          {showProfit ? (
+            <StatTile icon={TrendingUp} tint="bg-amber-100 text-amber-600" label="Gross profit" value={formatCurrency(analytics.profit)} />
+          ) : (
+            <StatTile icon={Receipt} tint="bg-sky-100 text-sky-600" label="Transactions" value={String(analytics.transactions)} />
+          )}
+          {showCapital ? (
+            <StatTile icon={Wallet} tint="bg-violet-100 text-violet-600" label="Capital (COGS)" value={formatCurrency(analytics.capital)} />
+          ) : (
+            <StatTile icon={Package} tint="bg-violet-100 text-violet-600" label="Items sold" value={String(analytics.itemsSold)} />
+          )}
+          <StatTile icon={Receipt} tint="bg-sky-100 text-sky-600" label="Transactions" value={String(analytics.transactions)} sub={`${analytics.itemsSold} items sold`} />
+        </div>
+
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <TopRankedTile label="Top 3 in-demand products" items={analytics.productRanking} />
+          <InDemandTile label="In-demand category" item={analytics.topCategory} />
+        </div>
+      </div>
 
       {user && canApproveVoidSale(user) && voidRequests.length > 0 && (
         <div className="card mb-4 border-amber-200 bg-amber-50/50">

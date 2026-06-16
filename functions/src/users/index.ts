@@ -4,9 +4,17 @@ import { db, now, stripUndefined } from "../utils/firestore";
 import { emailDocId, normalizeEmail } from "../utils/email";
 import { invalidArgument, permissionDenied, notFound, failedPrecondition } from "../utils/errors";
 import { resolveAuthOptional, isPlatformOwnerUid, isStoreAdminRole } from "../utils/auth";
+import { createAuditLogEntry } from "../audit";
 
 const BRANCH_STAFF_ROLES: UserRole[] = ["STORE_MANAGER", "CASHIER"];
 const PLATFORM_OWNER_ROLES: UserRole[] = ["PLATFORM_OWNER", "ADMIN"];
+const PERMISSION_KEYS: (keyof CustomPermissions)[] = [
+  "canVoidSale",
+  "canApproveStockAdjustment",
+  "canViewSupplierCost",
+  "canCreatePurchaseRequest",
+  "canChangePrice",
+];
 
 export const registerUserEmail = onCall(async (request) => {
   if (!request.auth?.uid) throw permissionDenied();
@@ -86,6 +94,148 @@ export const registerUserEmail = onCall(async (request) => {
 
   await db.collection("registeredEmails").doc(emailKey).set(record);
   return { emailKey, email };
+});
+
+export const updateUserRole = onCall(async (request) => {
+  if (!request.auth?.uid) throw permissionDenied();
+  const callerUid = request.auth.uid;
+
+  const { uid, role, branchId } = request.data as {
+    uid: string;
+    role: UserRole;
+    branchId?: string;
+  };
+  if (!uid || !role) throw invalidArgument("uid and role are required");
+  if (uid === callerUid) throw failedPrecondition("You cannot change your own role");
+
+  const idxSnap = await db.collection("userStoreIndex").doc(uid).get();
+  if (!idxSnap.exists) throw notFound("User not found");
+  const idx = idxSnap.data() as { storeId?: string; isPlatformOwner?: boolean };
+  if (idx.isPlatformOwner) throw permissionDenied("Cannot change a platform owner's role");
+  if (!idx.storeId) throw failedPrecondition("User is not assigned to a store");
+  const storeId = idx.storeId;
+
+  const platformOwner = await isPlatformOwnerUid(callerUid);
+  if (!platformOwner) {
+    const auth = await resolveAuthOptional(callerUid);
+    if (!auth || !isStoreAdminRole(auth.user.role as UserRole | "OWNER") || auth.storeId !== storeId) {
+      throw permissionDenied("Only the store admin or platform owner can change roles");
+    }
+    if (!BRANCH_STAFF_ROLES.includes(role)) {
+      throw permissionDenied("Store admin can only assign branch manager or cashier roles");
+    }
+  } else if (![...BRANCH_STAFF_ROLES, "ADMIN"].includes(role)) {
+    throw permissionDenied("Unsupported role for this user");
+  }
+
+  const userRef = db.collection("stores").doc(storeId).collection("users").doc(uid);
+  const userSnap = await userRef.get();
+  if (!userSnap.exists) throw notFound("User profile not found");
+  const target = userSnap.data() as { role: UserRole; email?: string; branchId?: string };
+
+  let nextBranchId: string;
+  if (BRANCH_STAFF_ROLES.includes(role)) {
+    nextBranchId = branchId ?? target.branchId ?? "";
+    if (!nextBranchId) throw invalidArgument("branchId is required for branch staff");
+  } else {
+    nextBranchId = ""; // Store admin is assigned at store level, not a branch
+  }
+
+  const ts = now();
+  const batch = db.batch();
+  batch.update(userRef, { role, branchId: nextBranchId, updatedAt: ts });
+  batch.update(db.collection("userStoreIndex").doc(uid), { role });
+
+  if (target.email) {
+    const emailKey = emailDocId(normalizeEmail(target.email));
+    const regRef = db.collection("registeredEmails").doc(emailKey);
+    const regSnap = await regRef.get();
+    if (regSnap.exists) {
+      batch.update(
+        regRef,
+        stripUndefined({
+          role,
+          branchId: BRANCH_STAFF_ROLES.includes(role) ? nextBranchId : undefined,
+          updatedAt: ts,
+        }),
+      );
+    }
+  }
+
+  await batch.commit();
+  return { success: true, role, branchId: nextBranchId };
+});
+
+/** Admin / platform owner grants or revokes a branch-staff member's custom permissions. */
+export const setUserPermissions = onCall(async (request) => {
+  if (!request.auth?.uid) throw permissionDenied();
+  const callerUid = request.auth.uid;
+
+  const { uid, permissions } = request.data as { uid: string; permissions: CustomPermissions };
+  if (!uid || permissions == null || typeof permissions !== "object") {
+    throw invalidArgument("uid and permissions are required");
+  }
+  if (uid === callerUid) throw failedPrecondition("You cannot change your own permissions");
+
+  const idxSnap = await db.collection("userStoreIndex").doc(uid).get();
+  if (!idxSnap.exists) throw notFound("User not found");
+  const idx = idxSnap.data() as { storeId?: string; isPlatformOwner?: boolean };
+  if (idx.isPlatformOwner) throw permissionDenied("Cannot change a platform owner's permissions");
+  if (!idx.storeId) throw failedPrecondition("User is not assigned to a store");
+  const storeId = idx.storeId;
+
+  const platformOwner = await isPlatformOwnerUid(callerUid);
+  let callerName = "Platform Owner";
+  if (!platformOwner) {
+    const auth = await resolveAuthOptional(callerUid);
+    if (!auth || !isStoreAdminRole(auth.user.role as UserRole | "OWNER") || auth.storeId !== storeId) {
+      throw permissionDenied("Only the store admin or platform owner can change permissions");
+    }
+    callerName = auth.user.fullName;
+  } else {
+    const poSnap = await db.collection("platformOwners").doc(callerUid).get();
+    callerName = (poSnap.data()?.fullName as string) ?? "Platform Owner";
+  }
+
+  const userRef = db.collection("stores").doc(storeId).collection("users").doc(uid);
+  const userSnap = await userRef.get();
+  if (!userSnap.exists) throw notFound("User profile not found");
+  const target = userSnap.data() as { role: UserRole; email?: string };
+  if (!BRANCH_STAFF_ROLES.includes(target.role)) {
+    throw failedPrecondition("Only branch managers and cashiers have custom permissions");
+  }
+
+  // Only persist known boolean flags — ignore anything unexpected in the payload.
+  const clean: Record<string, boolean> = {};
+  for (const key of PERMISSION_KEYS) {
+    clean[key] = permissions[key] === true;
+  }
+
+  const ts = now();
+  const batch = db.batch();
+  batch.update(userRef, { permissions: clean, updatedAt: ts });
+
+  if (target.email) {
+    const regRef = db.collection("registeredEmails").doc(emailDocId(normalizeEmail(target.email)));
+    const regSnap = await regRef.get();
+    if (regSnap.exists) {
+      batch.update(regRef, { permissions: clean, updatedAt: ts });
+    }
+  }
+
+  await batch.commit();
+
+  await createAuditLogEntry({
+    storeId,
+    action: "USER_PERMISSIONS_UPDATED",
+    entityType: "user",
+    entityId: uid,
+    newValue: clean,
+    performedBy: callerUid,
+    performedByName: callerName,
+  });
+
+  return { success: true, permissions: clean };
 });
 
 export const claimAccount = onCall(async (request) => {

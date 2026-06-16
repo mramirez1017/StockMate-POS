@@ -1,11 +1,13 @@
 import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
+  MessageSquare,
   Package,
   Tags,
   Truck,
   ClipboardList,
   Warehouse,
+  ArrowDownUp,
   Trash2,
   Percent,
   CreditCard,
@@ -18,7 +20,6 @@ import {
   Menu,
   X,
   Building2,
-  Search,
   type LucideIcon,
 } from "lucide-react";
 import { useMemo, useState, useEffect } from "react";
@@ -26,11 +27,14 @@ import { useAuth } from "@/contexts/AuthContext";
 import { isStoreAdmin, isManagerOrAbove } from "@/lib/permissions";
 import { branchName, useBranches } from "@/lib/useBranches";
 import { pageTitle } from "@/lib/pageTitles";
+import { routeVisual } from "@/lib/transactionVisuals";
 import PlatformStoreSelector from "@/components/PlatformStoreSelector";
 import BranchFilter from "@/components/BranchFilter";
 import AppFooter from "@/components/AppFooter";
+import { ActiveBranchProvider } from "@/contexts/ActiveBranchContext";
 import NotificationBell from "@/components/NotificationBell";
 import { useNotifications } from "@/hooks/useNotifications";
+import { useStoreNotifications } from "@/hooks/useStoreNotifications";
 import type { User } from "@stockmate/types";
 
 type NavRoles = "all" | "admin" | "manager";
@@ -62,7 +66,10 @@ const platformNavGroups: NavGroup[] = [
 const storeNavGroups: NavGroup[] = [
   {
     label: "Overview",
-    items: [{ to: "/dashboard", icon: LayoutDashboard, label: "Dashboard", roles: "all" }],
+    items: [
+      { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard", roles: "all" },
+      { to: "/activity", icon: MessageSquare, label: "Activity & Approvals", roles: "all" },
+    ],
   },
   {
     label: "Catalog",
@@ -78,12 +85,14 @@ const storeNavGroups: NavGroup[] = [
       { to: "/purchase-orders", icon: ClipboardList, label: "Purchase Orders", roles: "manager" },
       { to: "/deliveries", icon: Truck, label: "Deliveries", roles: "all" },
       { to: "/inventory", icon: Warehouse, label: "Inventory", roles: "all" },
+      { to: "/stock-adjustments", icon: ArrowDownUp, label: "Stock Adjustments", roles: "all" },
       { to: "/disposal", icon: Trash2, label: "Stock Disposal", roles: "all" },
     ],
   },
   {
     label: "Sales",
     items: [
+      { to: "/pos", icon: CreditCard, label: "POS (New Sale)", roles: "all" },
       { to: "/sales", icon: ShoppingCart, label: "Sales", roles: "manager" },
       { to: "/promos", icon: Percent, label: "Promos & Discounts", roles: "admin" },
       { to: "/reports", icon: BarChart3, label: "Reports", roles: "manager" },
@@ -97,13 +106,6 @@ const storeNavGroups: NavGroup[] = [
       { to: "/settings", icon: Settings, label: "Settings", roles: "admin" },
     ],
   },
-];
-
-const shortcutItems: NavItem[] = [
-  { to: "/pos", icon: CreditCard, label: "POS (New Sale)", roles: "all" },
-  { to: "/deliveries", icon: Truck, label: "Receive Delivery", roles: "all" },
-  { to: "/disposal", icon: Trash2, label: "Stock Disposal", roles: "all" },
-  { to: "/inventory", icon: Search, label: "Product Search", roles: "all" },
 ];
 
 function canSeeNavItem(item: NavItem, user: User | null, isPlatformOwner: boolean): boolean {
@@ -159,7 +161,6 @@ function SidebarContent({
   onNavigate,
   deliveryBadge,
   groups,
-  showShortcuts,
   user,
   displayName,
   displayRole,
@@ -171,7 +172,6 @@ function SidebarContent({
   onNavigate: () => void;
   deliveryBadge: number;
   groups: NavGroup[];
-  showShortcuts: boolean;
   user: User | null;
   displayName: string;
   displayRole: string;
@@ -180,8 +180,6 @@ function SidebarContent({
   onBranchChange: (id: string) => void;
   isPlatformOwner: boolean;
 }) {
-  const filteredShortcuts = filterNavItems(shortcutItems, user, isPlatformOwner);
-
   return (
     <>
       <div className="sidebar-brand">
@@ -212,17 +210,6 @@ function SidebarContent({
               </div>
             </div>
           ),
-        )}
-
-        {showShortcuts && filteredShortcuts.length > 0 && (
-          <div>
-            <p className="nav-section-label">Shortcuts</p>
-            <div className="space-y-0.5">
-              {filteredShortcuts.map((item) => (
-                <NavItemLink key={item.to} item={item} onNavigate={onNavigate} />
-              ))}
-            </div>
-          </div>
         )}
       </nav>
 
@@ -274,14 +261,14 @@ export default function Layout() {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [headerBranchId, setHeaderBranchId] = useState("");
-  const { notifications, count: notificationCount, deliveryCount: deliveryBadge } = useNotifications(
-    storeId,
-    user,
-  );
+  const { deliveryCount: deliveryBadge } = useNotifications(storeId, user);
+  const { notifications, unreadCount, markRead, markAllRead } = useStoreNotifications(storeId, user);
 
   const displayName = platformOwner?.fullName ?? user?.fullName ?? "User";
   const displayRole = isPlatformOwner ? "Platform Owner" : (user?.role?.replace(/_/g, " ") ?? "");
   const title = pageTitle(location.pathname);
+  const pageVisual = routeVisual(location.pathname);
+  const PageIcon = pageVisual.icon;
 
   useEffect(() => {
     if (user?.branchId) setHeaderBranchId(user.branchId);
@@ -330,7 +317,6 @@ export default function Layout() {
     onNavigate: closeSidebar,
     deliveryBadge,
     groups: navGroups,
-    showShortcuts: !!user && !isPlatformOwner,
     user,
     displayName,
     displayRole,
@@ -341,6 +327,9 @@ export default function Layout() {
   };
 
   return (
+    <ActiveBranchProvider
+      value={{ activeBranchId: headerBranchId || user?.branchId || "", setActiveBranchId: setHeaderBranchId }}
+    >
     <div className="flex h-dvh min-h-dvh overflow-hidden bg-[#f3f4f6]">
       {sidebarOpen && (
         <div className="fixed inset-0 z-40 bg-slate-900/40 lg:hidden" onClick={closeSidebar} aria-hidden />
@@ -378,9 +367,15 @@ export default function Layout() {
               <Menu size={22} />
             </button>
 
-            <h1 className="min-w-0 flex-1 truncate text-base font-semibold text-slate-900 sm:text-lg lg:max-w-[40%]">
-              {title}
-            </h1>
+            <div className="flex min-w-0 flex-1 items-center gap-2.5 lg:max-w-[40%]">
+              <span
+                className={`hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl sm:inline-flex ${pageVisual.gradient} text-white shadow-glow-sm`}
+                aria-hidden
+              >
+                <PageIcon size={18} strokeWidth={1.85} />
+              </span>
+              <h1 className="min-w-0 truncate text-base font-semibold text-slate-900 sm:text-lg">{title}</h1>
+            </div>
 
             <div className="hidden min-w-0 flex-1 items-center justify-center lg:flex">
               {isPlatformOwner ? (
@@ -390,22 +385,14 @@ export default function Layout() {
               ) : (
                 user &&
                 branches.length > 0 && (
-                  <div className="flex max-w-md items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5">
+                  <div className="flex max-w-md items-center gap-2 rounded-full border border-brand-100 bg-brand-50/60 px-4 py-1.5">
                     <Building2 size={16} className="shrink-0 text-brand-600" />
-                    {isStoreAdmin(user) ? (
-                      <BranchFilter
-                        branches={branches.filter((b) => b.status === "ACTIVE")}
-                        user={user}
-                        value={headerBranchId}
-                        onChange={setHeaderBranchId}
-                        showAllOption={isStoreAdmin(user)}
-                        className="min-h-0 flex-1 border-0 bg-transparent py-0 pl-0 pr-8 text-sm font-medium shadow-none focus:ring-0"
-                      />
-                    ) : (
-                      <span className="truncate text-sm font-medium text-slate-700">
-                        {branchName(branches, user.branchId)}
-                      </span>
-                    )}
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-brand-500">
+                      Branch
+                    </span>
+                    <span className="branch-glow truncate text-sm font-bold">
+                      {branchName(branches, headerBranchId || user.branchId)}
+                    </span>
                   </div>
                 )
               )}
@@ -413,7 +400,12 @@ export default function Layout() {
 
             <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
               {user && storeId && (
-                <NotificationBell notifications={notifications} count={notificationCount} />
+                <NotificationBell
+                  notifications={notifications}
+                  unreadCount={unreadCount}
+                  onMarkRead={markRead}
+                  onMarkAllRead={markAllRead}
+                />
               )}
 
               <button
@@ -437,20 +429,12 @@ export default function Layout() {
               <div className="app-context-bar">
                 <div className="flex items-center gap-2">
                   <Building2 size={16} className="shrink-0 text-brand-600" />
-                  {isStoreAdmin(user) ? (
-                    <BranchFilter
-                      branches={branches.filter((b) => b.status === "ACTIVE")}
-                      user={user}
-                      value={headerBranchId}
-                      onChange={setHeaderBranchId}
-                      showAllOption={isStoreAdmin(user)}
-                      className="input-field min-h-[40px] flex-1 py-2 text-sm"
-                    />
-                  ) : (
-                    <span className="truncate text-sm font-medium text-slate-700">
-                      {branchName(branches, user.branchId)}
-                    </span>
-                  )}
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-brand-500">
+                    Branch
+                  </span>
+                  <span className="branch-glow truncate text-sm font-bold">
+                    {branchName(branches, headerBranchId || user.branchId)}
+                  </span>
                 </div>
               </div>
             )
@@ -463,5 +447,6 @@ export default function Layout() {
         </main>
       </div>
     </div>
+    </ActiveBranchProvider>
   );
 }

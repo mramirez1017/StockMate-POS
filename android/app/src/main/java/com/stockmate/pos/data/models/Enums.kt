@@ -19,7 +19,7 @@ enum class EntityStatus {
 }
 
 enum class POStatus {
-    DRAFT, ORDERED, IN_TRANSIT, PARTIALLY_RECEIVED, RECEIVED, CANCELLED;
+    DRAFT, ORDERED, IN_TRANSIT, PARTIALLY_RECEIVED, RECEIVED, COMPLETED, CANCELLED;
 
     companion object {
         fun fromString(value: String): POStatus =

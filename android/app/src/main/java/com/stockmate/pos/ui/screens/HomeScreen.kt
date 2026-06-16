@@ -30,6 +30,8 @@ fun HomeScreen(
     user: User,
     storeName: String,
     viewModel: HomeViewModel,
+    unreadCount: Int = 0,
+    onOpenNotifications: () -> Unit = {},
     onNavigate: (String) -> Unit,
     onSignOut: () -> Unit,
 ) {
@@ -55,6 +57,23 @@ fun HomeScreen(
                 title = "Dashboard",
                 contextLabel = storeName.ifBlank { null },
                 onSignOut = onSignOut,
+                actions = {
+                    IconButton(onClick = onOpenNotifications) {
+                        BadgedBox(
+                            badge = {
+                                if (unreadCount > 0) {
+                                    Badge { Text(if (unreadCount > 99) "99+" else unreadCount.toString()) }
+                                }
+                            },
+                        ) {
+                            Icon(
+                                Icons.Default.Notifications,
+                                contentDescription = "Notifications",
+                                tint = StockMateColors.Slate600,
+                            )
+                        }
+                    }
+                },
             )
         },
     ) { padding ->

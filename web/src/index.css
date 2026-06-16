@@ -5,7 +5,7 @@
 @tailwind utilities;
 
 :root {
-  --color-surface: #f3f4f6;
+  --color-surface: #f4f7f6;
   --color-panel: #ffffff;
   --color-border: #e5e7eb;
   --color-accent: #059669;
@@ -21,6 +21,9 @@
   body {
     @apply font-sans text-slate-800 antialiased;
     background-color: var(--color-surface);
+    background-image: radial-gradient(1200px 600px at 100% -10%, rgba(16, 185, 129, 0.08), transparent 55%),
+      radial-gradient(1000px 500px at -10% 110%, rgba(13, 148, 136, 0.08), transparent 50%);
+    background-attachment: fixed;
     -webkit-tap-highlight-color: transparent;
     overflow-x: hidden;
   }
@@ -40,7 +43,7 @@
 
 @layer components {
   .btn-primary {
-    @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-brand-gradient px-4 py-2.5 text-sm font-semibold text-white shadow-glow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-glow active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-glow-sm;
   }
 
   .btn-secondary {
@@ -74,11 +77,11 @@
   }
 
   .card {
-    @apply rounded-xl border border-slate-200/80 bg-white p-4 shadow-panel sm:p-5;
+    @apply rounded-2xl border border-slate-200/70 bg-white/95 p-4 shadow-panel backdrop-blur-sm transition-shadow hover:shadow-card sm:p-5;
   }
 
   .kpi-card {
-    @apply rounded-xl border border-slate-200/80 bg-white p-4 shadow-panel transition hover:shadow-card sm:p-5;
+    @apply rounded-2xl border border-slate-200/70 bg-white p-4 shadow-panel transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-card sm:p-5;
   }
 
   .filter-bar {
@@ -153,7 +156,31 @@
   }
 
   .app-topbar {
-    @apply flex shrink-0 flex-col border-b border-slate-200/80 bg-white;
+    @apply relative z-30 flex shrink-0 flex-col border-b border-slate-200/70 bg-white/80 backdrop-blur-md;
+  }
+
+  .scroll-area {
+    @apply overflow-y-auto overscroll-y-contain;
+    scrollbar-width: thin;
+    scrollbar-color: rgb(203 213 225) transparent;
+  }
+
+  .scroll-area::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .scroll-area::-webkit-scrollbar-thumb {
+    background-color: rgb(203 213 225);
+    border-radius: 9999px;
+  }
+
+  .scroll-area::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(148 163 184);
+  }
+
+  .scroll-area::-webkit-scrollbar-track {
+    background: transparent;
   }
 
   .app-topbar-row {
@@ -165,7 +192,7 @@
   }
 
   .app-main {
-    @apply min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain px-3 py-3 safe-bottom sm:px-6 sm:py-6;
+    @apply min-h-0 flex-1 animate-fade-in overflow-x-hidden overflow-y-auto overscroll-y-contain px-3 py-3 safe-bottom sm:px-6 sm:py-6;
   }
 
   .page-header:empty {
@@ -173,7 +200,7 @@
   }
 
   .sidebar-brand {
-    @apply box-border flex h-14 shrink-0 items-center gap-2.5 border-b border-slate-200/80 bg-[#fafafa] px-3 py-2 pr-11 lg:pr-3;
+    @apply box-border flex h-14 shrink-0 items-center gap-2.5 border-b border-slate-200/70 bg-gradient-to-r from-brand-50 to-accent-50 px-3 py-2 pr-11 lg:pr-3;
   }
 
   .sidebar-brand-mark {
@@ -185,11 +212,11 @@
   }
 
   .sidebar-brand-name {
-    @apply truncate text-lg font-bold leading-none tracking-tight text-slate-800;
+    @apply truncate bg-gradient-to-r from-brand-700 to-accent-600 bg-clip-text text-lg font-bold leading-none tracking-tight text-transparent;
   }
 
   .sidebar-brand-badge {
-    @apply shrink-0 rounded-md bg-brand-600 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white;
+    @apply shrink-0 rounded-md bg-brand-gradient px-1.5 py-0.5 text-[10px] font-bold leading-none text-white shadow-glow-sm;
   }
 
   .nav-section-label {
@@ -216,11 +243,11 @@
   }
 
   .quick-action-tile {
-    @apply flex h-full items-center gap-3 rounded-xl border border-slate-200/80 bg-white p-3 shadow-panel transition hover:border-brand-200 hover:shadow-card active:scale-[0.99] sm:gap-4 sm:p-4;
+    @apply flex h-full items-center gap-3 rounded-2xl border border-slate-200/70 bg-white p-3 shadow-panel transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-card active:scale-[0.99] sm:gap-4 sm:p-4;
   }
 
   .quick-action-icon {
-    @apply flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white sm:h-12 sm:w-12;
+    @apply flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white shadow-glow-sm sm:h-12 sm:w-12;
   }
 
   .section-heading {
@@ -229,5 +256,74 @@
 
   .user-sidebar-card {
     @apply rounded-xl border border-slate-200 bg-white p-3 shadow-sm;
+  }
+
+  /* Smoothly reveal a list of children with a small cascade. */
+  .stagger-children > * {
+    animation: slide-up 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .stagger-children > *:nth-child(1) { animation-delay: 0.02s; }
+  .stagger-children > *:nth-child(2) { animation-delay: 0.06s; }
+  .stagger-children > *:nth-child(3) { animation-delay: 0.1s; }
+  .stagger-children > *:nth-child(4) { animation-delay: 0.14s; }
+  .stagger-children > *:nth-child(5) { animation-delay: 0.18s; }
+  .stagger-children > *:nth-child(6) { animation-delay: 0.22s; }
+  .stagger-children > *:nth-child(7) { animation-delay: 0.26s; }
+  .stagger-children > *:nth-child(8) { animation-delay: 0.3s; }
+  .stagger-children > *:nth-child(n + 9) { animation-delay: 0.34s; }
+
+  /* Generic interactive lift used across cards/rows. */
+  .hover-lift {
+    @apply transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card;
+  }
+
+  /* Avatar chip with deterministic gradient (set via inline style). */
+  .avatar-chip {
+    @apply flex shrink-0 items-center justify-center rounded-full text-xs font-bold text-white shadow-glow-sm;
+  }
+
+  .chat-bubble-in {
+    animation: pop-in 0.26s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  /* Glowing, readable branch name shown in the top bar. */
+  .branch-glow {
+    background: linear-gradient(90deg, #047857, #10b981, #0d9488, #10b981, #047857);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: branch-shimmer 4s linear infinite;
+  }
+}
+
+@keyframes branch-shimmer {
+  0% {
+    background-position: 0% center;
+    filter: drop-shadow(0 0 0 rgba(16, 185, 129, 0));
+  }
+  50% {
+    filter: drop-shadow(0 0 6px rgba(16, 185, 129, 0.45));
+  }
+  100% {
+    background-position: 200% center;
+    filter: drop-shadow(0 0 0 rgba(16, 185, 129, 0));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .branch-glow {
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stagger-children > *,
+  .chat-bubble-in,
+  .animate-fade-in,
+  .animate-slide-up,
+  .animate-pop-in,
+  .animate-pulse-ring {
+    animation: none !important;
   }
 }

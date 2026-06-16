@@ -615,12 +615,12 @@ export default function Pos() {
       />
 
       <Modal open={checkoutOpen} onClose={() => !checkingOut && setCheckoutOpen(false)} title="Complete transaction">
-        <div className="space-y-4">
+        <div className="space-y-3">
           <p className="text-sm text-slate-600">
             Branch: <span className="font-medium text-slate-900">{branchName(branches, branchId)}</span>
           </p>
 
-          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 px-4 py-3 hover:border-emerald-300">
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 px-3 py-2.5 hover:border-emerald-300">
             <input
               type="checkbox"
               checked={pwdOrSenior}
@@ -634,12 +634,12 @@ export default function Pos() {
           </label>
 
           <div>
-            <p className="mb-2 text-sm font-medium text-slate-700">Payment method</p>
+            <p className="mb-1.5 text-sm font-medium text-slate-700">Payment method</p>
             <div className="space-y-2">
               {PAYMENT_METHODS.map((method) => (
                 <label
                   key={method}
-                  className={`flex cursor-pointer items-center gap-3 rounded-lg border px-4 py-3 transition ${
+                  className={`flex cursor-pointer items-center gap-3 rounded-lg border px-4 py-2.5 transition ${
                     paymentMethod === method
                       ? "border-emerald-500 bg-emerald-50"
                       : "border-slate-200 hover:border-slate-300"
@@ -659,7 +659,7 @@ export default function Pos() {
           </div>
 
           {paymentMethod === "CASH" && (
-            <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">Amount tendered</label>
                 <input
@@ -704,7 +704,7 @@ export default function Pos() {
             </div>
           )}
 
-          <div className="space-y-1 rounded-lg border border-slate-100 bg-white px-4 py-3 text-sm">
+          <div className="space-y-1 rounded-lg border border-slate-100 bg-white px-3 py-2.5 text-sm">
             <div className="flex justify-between">
               <span className="text-slate-600">Subtotal</span>
               <span>{formatCurrency(cartSubtotal)}</span>

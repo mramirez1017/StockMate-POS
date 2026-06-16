@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { collection, onSnapshot, addDoc, updateDoc, doc } from "firebase/firestore";
 import { Plus } from "lucide-react";
 import { db } from "@/firebase";
@@ -9,6 +10,7 @@ import DataTable from "@/components/DataTable";
 import Modal from "@/components/Modal";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { statusBadgeClass } from "@/lib/format";
+import { api } from "@/lib/api";
 
 export default function Suppliers() {
   const { storeId } = useAuth();
@@ -17,6 +19,9 @@ export default function Suppliers() {
   const [editing, setEditing] = useState<Supplier | null>(null);
   const [form, setForm] = useState({ name: "", contactPerson: "", phoneNumber: "", email: "", address: "", notes: "", status: "ACTIVE" as EntityStatus });
   const [loading, setLoading] = useState(true);
+  const [fulfillRequestId, setFulfillRequestId] = useState<string | null>(null);
+  const location = useLocation();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!storeId) return;
@@ -26,13 +31,32 @@ export default function Suppliers() {
     });
   }, [storeId]);
 
+  useEffect(() => {
+    const st = location.state as { openCreate?: boolean; prefillName?: string; fulfillRequestId?: string } | null;
+    if (st?.openCreate) {
+      setEditing(null);
+      setForm({ name: st.prefillName ?? "", contactPerson: "", phoneNumber: "", email: "", address: "", notes: "", status: "ACTIVE" });
+      setFulfillRequestId(st.fulfillRequestId ?? null);
+      setModalOpen(true);
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location, navigate]);
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!storeId) return;
     if (editing) {
       await updateDoc(doc(db, "stores", storeId, "suppliers", editing.id), { ...form, updatedAt: Date.now() });
     } else {
-      await addDoc(collection(db, "stores", storeId, "suppliers"), { ...form, storeId, createdAt: Date.now(), updatedAt: Date.now() });
+      const ref = await addDoc(collection(db, "stores", storeId, "suppliers"), { ...form, storeId, createdAt: Date.now(), updatedAt: Date.now() });
+      if (fulfillRequestId) {
+        try {
+          await api.fulfillPurchaseRequest({ purchaseRequestId: fulfillRequestId, resultId: ref.id, resultName: form.name.trim() });
+        } catch {
+          // Supplier created; linking back to the request is best-effort.
+        }
+        setFulfillRequestId(null);
+      }
     }
     setModalOpen(false);
   };

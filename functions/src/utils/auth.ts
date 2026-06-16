@@ -131,6 +131,17 @@ export function canApproveAdjustment(user: User): boolean {
   return isStoreAdminRole(user.role as UserRole | "OWNER") || !!user.permissions?.canApproveStockAdjustment;
 }
 
+/** Managers/admins can always request; cashiers need the explicit permission. */
+export function canCreatePurchaseRequest(user: User): boolean {
+  return isManagerOrAbove(user) || !!user.permissions?.canCreatePurchaseRequest;
+}
+
+export function requireCreatePurchaseRequest(user: User): void {
+  if (!canCreatePurchaseRequest(user)) {
+    throw permissionDenied("You do not have permission to create purchase requests");
+  }
+}
+
 export function assertBranchAccess(user: User, branchId: string): void {
   if (!isStoreAdminRole(user.role as UserRole | "OWNER") && user.branchId !== branchId) {
     throw permissionDenied("Branch access denied");

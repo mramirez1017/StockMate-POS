@@ -10,22 +10,38 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
+import com.stockmate.pos.ui.theme.StockMateColors
 import java.util.concurrent.Executors
 
 @Composable
@@ -54,13 +70,30 @@ fun BarcodeScannerBox(
         }
     }
 
-    Box(modifier = modifier) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(StockMateColors.Slate900),
+        contentAlignment = Alignment.Center,
+    ) {
         if (!hasPermission) {
-            Text(
-                text = "Camera permission is required to scan barcodes.",
-                modifier = Modifier.align(Alignment.Center).padding(16.dp),
-                style = MaterialTheme.typography.bodyMedium,
-            )
+            Row(
+                modifier = Modifier.padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.QrCodeScanner,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp),
+                )
+                Text(
+                    text = "Camera permission is required to scan barcodes.",
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
             return@Box
         }
 
@@ -70,6 +103,10 @@ fun BarcodeScannerBox(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
                 PreviewView(ctx).apply {
+                    // COMPATIBLE (TextureView) respects Compose layout bounds + rounded
+                    // clipping; the default PERFORMANCE (SurfaceView) punches through and
+                    // overlaps surrounding content.
+                    implementationMode = PreviewView.ImplementationMode.COMPATIBLE
                     scaleType = PreviewView.ScaleType.FILL_CENTER
                 }
             },
@@ -119,6 +156,42 @@ fun BarcodeScannerBox(
                 }, ContextCompat.getMainExecutor(context))
             },
         )
+
+        // Scan-frame reticle so the user knows where to aim the barcode.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.74f)
+                .fillMaxHeight(0.56f)
+                .border(2.dp, StockMateColors.Brand500, RoundedCornerShape(12.dp)),
+        )
+
+        // Readable helper label pinned to the bottom.
+        Surface(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(10.dp),
+            color = StockMateColors.Slate900.copy(alpha = 0.6f),
+            shape = RoundedCornerShape(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.QrCodeScanner,
+                    contentDescription = null,
+                    tint = StockMateColors.Brand200,
+                    modifier = Modifier.size(14.dp),
+                )
+                Text(
+                    text = "Align the barcode inside the frame",
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
+        }
     }
 }
 

@@ -4,6 +4,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -13,9 +16,13 @@ import com.stockmate.pos.data.models.User
 import com.stockmate.pos.ui.components.BarcodeScannerBox
 import com.stockmate.pos.ui.components.ErrorText
 import com.stockmate.pos.ui.components.LoadingBox
+import com.stockmate.pos.ui.components.ProductAvatar
+import com.stockmate.pos.ui.components.StockMateOutlinedFieldColors
 import com.stockmate.pos.ui.components.StockMateScaffold
 import com.stockmate.pos.ui.components.StockMateTopBar
+import com.stockmate.pos.ui.components.StockPill
 import com.stockmate.pos.ui.components.formatCurrency
+import com.stockmate.pos.ui.theme.StockMateColors
 import com.stockmate.pos.viewmodel.AssignBarcodeViewModel
 
 @Composable
@@ -46,6 +53,7 @@ fun AssignBarcodeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .imePadding()
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -58,8 +66,11 @@ fun AssignBarcodeScreen(
                 value = uiState.searchQuery,
                 onValueChange = viewModel::setSearchQuery,
                 label = { Text("Search product") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = StockMateColors.Slate400) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                colors = StockMateOutlinedFieldColors(),
             )
             ErrorText(uiState.error)
             uiState.successMessage?.let {
@@ -80,25 +91,49 @@ fun AssignBarcodeScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     items(uiState.products, key = { it.id }) { product ->
-                        ElevatedCard(
+                        Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { viewModel.selectProduct(product) },
+                            shape = RoundedCornerShape(12.dp),
+                            color = StockMateColors.Panel,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, StockMateColors.Border.copy(alpha = 0.8f)),
+                            shadowElevation = 1.dp,
                         ) {
-                            Column(Modifier.padding(16.dp)) {
-                                Text(product.name, style = MaterialTheme.typography.titleMedium)
-                                product.categoryName?.let {
-                                    Text(it, style = MaterialTheme.typography.bodySmall)
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                ProductAvatar(product.name)
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        product.name,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                        color = StockMateColors.Slate900,
+                                    )
+                                    product.categoryName?.let {
+                                        Text(it, style = MaterialTheme.typography.bodySmall, color = StockMateColors.Slate500)
+                                    }
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        modifier = Modifier.padding(top = 4.dp),
+                                    ) {
+                                        Text(
+                                            formatCurrency(product.sellingPrice),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = StockMateColors.Slate600,
+                                        )
+                                        StockPill(product)
+                                    }
                                 }
                                 Text(
-                                    "${formatCurrency(product.sellingPrice)} · Stock: ${product.currentStock} ${product.unit}",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                                Text(
-                                    "Tap to scan barcode",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.padding(top = 4.dp),
+                                    "Scan",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                    color = StockMateColors.Brand600,
                                 )
                             }
                         }
@@ -125,6 +160,7 @@ private fun AssignBarcodeScanPanel(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .imePadding()
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -170,6 +206,8 @@ private fun AssignBarcodeScanPanel(
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 readOnly = false,
+                shape = RoundedCornerShape(12.dp),
+                colors = StockMateOutlinedFieldColors(),
             )
 
             ErrorText(uiState.error)

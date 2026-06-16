@@ -19,6 +19,12 @@ data class DeliveryUiState(
     val isSubmitting: Boolean = false,
     val successMessage: String? = null,
     val error: String? = null,
+    /** Whether the barcode-scan helper is expanded in the checklist. */
+    val scannerVisible: Boolean = false,
+    /** Transient feedback from the last scan ("Found …", "not in this delivery"). */
+    val scanNotice: String? = null,
+    /** Line item the list should scroll to / highlight after a successful scan. */
+    val scrollToProductId: String? = null,
 )
 
 class DeliveryViewModel(
@@ -104,5 +110,46 @@ class DeliveryViewModel(
 
     fun clearMessages() {
         _uiState.update { it.copy(error = null, successMessage = null) }
+    }
+
+    fun toggleScanner() {
+        _uiState.update { it.copy(scannerVisible = !it.scannerVisible, scanNotice = null) }
+    }
+
+    fun dismissScanNotice() {
+        _uiState.update { it.copy(scanNotice = null) }
+    }
+
+    /** Scrolling is a one-shot effect — consumed by the screen after it runs. */
+    fun consumeScrollTarget() {
+        _uiState.update { it.copy(scrollToProductId = null) }
+    }
+
+    /** Resolve a scanned barcode to a line item in the current PO and surface it. */
+    fun onBarcodeScanned(user: User, barcode: String) {
+        val trimmed = barcode.trim()
+        if (trimmed.isEmpty()) return
+        viewModelScope.launch {
+            runCatching {
+                repository.findProductByBarcode(user.storeId, user.branchId, trimmed)
+            }.onSuccess { product ->
+                when {
+                    product == null ->
+                        _uiState.update { it.copy(scanNotice = "No product found for \"$trimmed\".") }
+                    _uiState.value.receiveItems.none { it.productId == product.id } ->
+                        _uiState.update { it.copy(scanNotice = "${product.name} isn't part of this delivery.") }
+                    else ->
+                        _uiState.update {
+                            it.copy(
+                                scanNotice = "Found ${product.name}",
+                                scrollToProductId = product.id,
+                                scannerVisible = false,
+                            )
+                        }
+                }
+            }.onFailure { e ->
+                _uiState.update { it.copy(scanNotice = e.message) }
+            }
+        }
     }
 }

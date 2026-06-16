@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
 import { Plus, Search, Barcode } from "lucide-react";
 import { db } from "@/firebase";
@@ -25,7 +25,7 @@ import {
   unitShort,
 } from "@/lib/productUnits";
 import { canViewSupplierCost, isStoreAdmin } from "@/lib/permissions";
-import { isStoreWideAccess } from "@/lib/branchScope";
+import { branchScopedQuery, isStoreWideAccess } from "@/lib/branchScope";
 import { branchName, useBranches } from "@/lib/useBranches";
 import { api } from "@/lib/api";
 import { callableErrorMessage } from "@/lib/callableError";
@@ -130,7 +130,7 @@ export default function Products() {
   }, [showBranchStock, branches, branchFilter]);
 
   useEffect(() => {
-    if (!storeId) return;
+    if (!storeId || !user) return;
     const u1 = onSnapshot(query(collection(db, "stores", storeId, "products"), orderBy("name")), (snap) => {
       setProducts(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Product));
       setLoading(false);
@@ -138,15 +138,18 @@ export default function Products() {
     const u2 = onSnapshot(collection(db, "stores", storeId, "categories"), (snap) => {
       setCategories(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Category));
     });
-    const u3 = onSnapshot(collection(db, "stores", storeId, "branchInventory"), (snap) => {
-      setInventory(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as BranchInventory));
-    });
+    const u3 = onSnapshot(
+      branchScopedQuery(collection(db, "stores", storeId, "branchInventory"), user),
+      (snap) => {
+        setInventory(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as BranchInventory));
+      },
+    );
     return () => {
       u1();
       u2();
       u3();
     };
-  }, [storeId]);
+  }, [storeId, user]);
 
   const stockByProduct = useMemo(() => {
     const map = new Map<string, BranchInventory>();
@@ -175,6 +178,21 @@ export default function Products() {
     setFormError(null);
     setModalOpen(true);
   };
+
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [fulfillRequestId, setFulfillRequestId] = useState<string | null>(null);
+  useEffect(() => {
+    const st = location.state as { openCreate?: boolean; prefillName?: string; fulfillRequestId?: string } | null;
+    if (st?.openCreate && user && isStoreAdmin(user)) {
+      setEditing(null);
+      setForm({ ...emptyForm(defaultBranchId), name: st.prefillName ?? "" });
+      setFulfillRequestId(st.fulfillRequestId ?? null);
+      setFormError(null);
+      setModalOpen(true);
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location, user, defaultBranchId, navigate]);
 
   const openEdit = (p: Product) => {
     setEditing(p);
@@ -256,11 +274,24 @@ export default function Products() {
           await api.changeProductPrice({ productId: editing.id, newPrice: sellingPrice });
         }
       } else {
-        await api.createProduct({
+        const res = await api.createProduct({
           ...payload,
           branchId: form.branchId,
           initialStock,
         });
+        if (fulfillRequestId) {
+          const newProductId = (res.data as { productId?: string })?.productId;
+          try {
+            await api.fulfillPurchaseRequest({
+              purchaseRequestId: fulfillRequestId,
+              resultId: newProductId,
+              resultName: payload.name,
+            });
+          } catch {
+            // Product created; linking back to the request is best-effort.
+          }
+          setFulfillRequestId(null);
+        }
       }
       setModalOpen(false);
     } catch (err) {
