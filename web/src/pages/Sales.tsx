@@ -3,7 +3,7 @@ import { collection, getDocs, onSnapshot, orderBy, where } from "firebase/firest
 import { Receipt, Package, Wallet, TrendingUp, PhilippinePeso } from "lucide-react";
 import { db } from "@/firebase";
 import { useAuth } from "@/contexts/AuthContext";
-import { Sale, SaleVoidRequest, Product, Category } from "@stockmate/types";
+import { Sale, SaleVoidRequest, SaleReturn, Product, Category } from "@stockmate/types";
 import PageHeader from "@/components/PageHeader";
 import DataTable from "@/components/DataTable";
 import Modal from "@/components/Modal";
@@ -17,12 +17,19 @@ import { api } from "@/lib/api";
 import { callableErrorMessage } from "@/lib/callableError";
 import { branchScopedQuery } from "@/lib/branchScope";
 
-type SalesFilter = "active" | "void_pending" | "voided" | "all";
+type SalesFilter = "active" | "void_pending" | "voided" | "refunded" | "all";
 
 function saleStatusLabel(sale: Sale): string {
   if (sale.status === "VOIDED") return "VOIDED";
   if (sale.pendingVoidRequestId) return "VOID PENDING";
+  if (sale.status === "REFUNDED") return "REFUNDED";
+  if (sale.status === "PARTIALLY_REFUNDED") return "PART. REFUNDED";
   return sale.status;
+}
+
+interface ReturnDraftLine {
+  quantity: string;
+  restock: boolean;
 }
 
 export default function Sales() {
@@ -35,6 +42,13 @@ export default function Sales() {
   const [voidSubmitting, setVoidSubmitting] = useState(false);
   const [voidError, setVoidError] = useState<string | null>(null);
   const [filter, setFilter] = useState<SalesFilter>("active");
+  const [returns, setReturns] = useState<SaleReturn[]>([]);
+  const [returnModalOpen, setReturnModalOpen] = useState(false);
+  const [returnLines, setReturnLines] = useState<Record<string, ReturnDraftLine>>({});
+  const [returnReason, setReturnReason] = useState("");
+  const [returnMethod, setReturnMethod] = useState("CASH");
+  const [returnSubmitting, setReturnSubmitting] = useState(false);
+  const [returnError, setReturnError] = useState<string | null>(null);
   const [range, setRange] = useState<DateRange>(EMPTY_RANGE);
   const [productMap, setProductMap] = useState<Map<string, ProductCostInfo>>(new Map());
   const [categoryNames, setCategoryNames] = useState<Map<string, string>>(new Map());
@@ -69,6 +83,10 @@ export default function Sales() {
           setLoading(false);
         },
       ),
+      onSnapshot(
+        branchScopedQuery(collection(db, "stores", storeId, "saleReturns"), user),
+        (snap) => setReturns(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as SaleReturn)),
+      ),
     ];
 
     if (canApproveVoidSale(user)) {
@@ -94,6 +112,32 @@ export default function Sales() {
     return map;
   }, [voidRequests]);
 
+  // Returned quantity per (saleId → productId → qty), to cap further returns.
+  const returnedQtyBySale = useMemo(() => {
+    const map = new Map<string, Map<string, number>>();
+    returns.forEach((r) => {
+      const inner = map.get(r.saleId) ?? new Map<string, number>();
+      r.items?.forEach((it) => inner.set(it.productId, (inner.get(it.productId) ?? 0) + it.quantity));
+      map.set(r.saleId, inner);
+    });
+    return map;
+  }, [returns]);
+
+  const returnsForSelected = useMemo(
+    () => (selected ? returns.filter((r) => r.saleId === selected.id).sort((a, b) => b.createdAt - a.createdAt) : []),
+    [returns, selected],
+  );
+
+  const returnableRemaining = (sale: Sale, productId: string, soldQty: number): number => {
+    const returned = returnedQtyBySale.get(sale.id)?.get(productId) ?? 0;
+    return Math.max(0, soldQty - returned);
+  };
+
+  const saleHasReturnable = (sale: Sale): boolean =>
+    (sale.status === "COMPLETED" || sale.status === "PARTIALLY_REFUNDED") &&
+    !sale.pendingVoidRequestId &&
+    sale.items.some((i) => returnableRemaining(sale, i.productId, i.quantity) > 0);
+
   const salesInRange = useMemo(
     () => sales.filter((s) => isWithinRange(s.createdAt, range)),
     [sales, range],
@@ -109,6 +153,7 @@ export default function Sales() {
       if (filter === "active") return sale.status === "COMPLETED" && !sale.pendingVoidRequestId;
       if (filter === "void_pending") return sale.status === "COMPLETED" && !!sale.pendingVoidRequestId;
       if (filter === "voided") return sale.status === "VOIDED";
+      if (filter === "refunded") return sale.status === "REFUNDED" || sale.status === "PARTIALLY_REFUNDED";
       return true;
     });
   }, [salesInRange, filter]);
@@ -158,6 +203,60 @@ export default function Sales() {
       await api.rejectSaleVoid({ voidRequestId: request.id, reviewNote: reviewNote || undefined });
     } catch (err) {
       alert(callableErrorMessage(err, "Failed to reject void"));
+    }
+  };
+
+  const openReturnModal = (sale: Sale) => {
+    setSelected(sale);
+    const initial: Record<string, ReturnDraftLine> = {};
+    sale.items.forEach((i) => {
+      initial[i.productId] = { quantity: "", restock: true };
+    });
+    setReturnLines(initial);
+    setReturnReason("");
+    setReturnMethod(sale.paymentMethod || "CASH");
+    setReturnError(null);
+    setReturnModalOpen(true);
+  };
+
+  const returnRefundPreview = useMemo(() => {
+    if (!selected) return 0;
+    return selected.items.reduce((sum, item) => {
+      const qty = parseInt(returnLines[item.productId]?.quantity || "0", 10) || 0;
+      if (qty <= 0) return sum;
+      const effectiveUnit = item.quantity > 0 ? item.lineTotal / item.quantity : item.unitPrice;
+      return sum + effectiveUnit * qty;
+    }, 0);
+  }, [selected, returnLines]);
+
+  const handleReturnSubmit = async () => {
+    if (!selected) return;
+    const items = selected.items
+      .map((item) => {
+        const draft = returnLines[item.productId];
+        const qty = parseInt(draft?.quantity || "0", 10) || 0;
+        return { productId: item.productId, quantity: qty, restock: draft?.restock !== false };
+      })
+      .filter((i) => i.quantity > 0);
+    if (items.length === 0) {
+      setReturnError("Enter a quantity for at least one item to return.");
+      return;
+    }
+    setReturnSubmitting(true);
+    setReturnError(null);
+    try {
+      await api.createSaleReturn({
+        saleId: selected.id,
+        items,
+        reason: returnReason.trim() || undefined,
+        refundMethod: returnMethod,
+      });
+      setReturnModalOpen(false);
+      setSelected(null);
+    } catch (err) {
+      setReturnError(callableErrorMessage(err, "Failed to process return"));
+    } finally {
+      setReturnSubmitting(false);
     }
   };
 
@@ -246,6 +345,7 @@ export default function Sales() {
             ["active", "Active sales"],
             ["void_pending", "Void pending"],
             ["voided", "Voided"],
+            ["refunded", "Refunded"],
             ["all", "All"],
           ] as const
         ).map(([value, label]) => (
@@ -292,7 +392,7 @@ export default function Sales() {
         ]}
       />
 
-      <Modal open={!!selected && !voidModalOpen} onClose={() => setSelected(null)} title="Receipt Details">
+      <Modal open={!!selected && !voidModalOpen && !returnModalOpen} onClose={() => setSelected(null)} title="Receipt Details">
         {selected && (
           <div className="space-y-4">
             <div className="text-sm text-slate-500">
@@ -354,6 +454,21 @@ export default function Sales() {
                 <span>{selected.paymentMethod}</span>
               </div>
             </div>
+            {(selected.refundedTotal ?? 0) > 0 && (
+              <div className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-900">
+                <span className="font-medium">Refunded:</span> {formatCurrency(selected.refundedTotal ?? 0)}
+                {returnsForSelected.length > 0 && (
+                  <ul className="mt-1 space-y-0.5 text-xs text-violet-700">
+                    {returnsForSelected.map((r) => (
+                      <li key={r.id}>
+                        {formatDate(r.createdAt)} · {r.items.reduce((s, i) => s + i.quantity, 0)} item(s) ·{" "}
+                        {formatCurrency(r.refundTotal)} ({r.refundMethod})
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
             {user &&
               canRequestVoidSale(user) &&
               selected.status === "COMPLETED" &&
@@ -362,6 +477,11 @@ export default function Sales() {
                   {manager ? "Void Sale" : "Request Void"}
                 </button>
               )}
+            {manager && saleHasReturnable(selected) && (
+              <button onClick={() => openReturnModal(selected)} className="btn-secondary w-full">
+                Return / Refund items
+              </button>
+            )}
             {user && canApproveVoidSale(user) && selected.pendingVoidRequestId && voidRequestBySaleId.get(selected.id) && (
               <div className="flex gap-2">
                 <button
@@ -416,6 +536,102 @@ export default function Sales() {
             </button>
           </div>
         </div>
+      </Modal>
+
+      <Modal open={returnModalOpen} onClose={() => setReturnModalOpen(false)} title="Return / Refund">
+        {selected && (
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600">
+              Choose how many of each item to return. Restocked items go back into inventory; un-restocked items
+              (damaged) do not.
+            </p>
+            <ul className="scroll-area max-h-72 space-y-2 pr-1">
+              {selected.items.map((item) => {
+                const remaining = returnableRemaining(selected, item.productId, item.quantity);
+                const draft = returnLines[item.productId] ?? { quantity: "", restock: true };
+                return (
+                  <li key={item.productId} className="rounded-lg border border-slate-100 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="min-w-0 truncate text-sm font-medium text-slate-800">{item.productName}</span>
+                      <span className="shrink-0 text-xs text-slate-400">returnable: {remaining}</span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-3">
+                      <input
+                        type="number"
+                        min={0}
+                        max={remaining}
+                        disabled={remaining === 0}
+                        className="input-field w-24 py-1.5"
+                        placeholder="Qty"
+                        value={draft.quantity}
+                        onChange={(e) => {
+                          const raw = parseInt(e.target.value, 10);
+                          const clamped = Number.isFinite(raw) ? Math.max(0, Math.min(remaining, raw)) : 0;
+                          setReturnLines((prev) => ({
+                            ...prev,
+                            [item.productId]: { ...draft, quantity: clamped ? String(clamped) : "" },
+                          }));
+                        }}
+                      />
+                      <label className="flex items-center gap-2 text-xs text-slate-600">
+                        <input
+                          type="checkbox"
+                          checked={draft.restock}
+                          disabled={remaining === 0}
+                          onChange={(e) =>
+                            setReturnLines((prev) => ({
+                              ...prev,
+                              [item.productId]: { ...draft, restock: e.target.checked },
+                            }))
+                          }
+                        />
+                        Restock to inventory
+                      </label>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Refund method</label>
+              <select className="input-field" value={returnMethod} onChange={(e) => setReturnMethod(e.target.value)}>
+                <option value="CASH">Cash</option>
+                <option value="GCASH">GCash</option>
+                <option value="BANK_TRANSFER">Bank transfer</option>
+                <option value="STORE_CREDIT">Store credit</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Reason (optional)</label>
+              <input
+                className="input-field"
+                value={returnReason}
+                onChange={(e) => setReturnReason(e.target.value)}
+                placeholder="e.g. Defective, wrong item, customer changed mind"
+              />
+            </div>
+            <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm">
+              <span className="font-medium text-slate-700">Estimated refund</span>
+              <span className="font-bold text-slate-900">{formatCurrency(returnRefundPreview)}</span>
+            </div>
+            {returnError && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{returnError}</div>
+            )}
+            <div className="form-actions">
+              <button type="button" onClick={() => setReturnModalOpen(false)} className="btn-secondary">
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleReturnSubmit}
+                disabled={returnSubmitting || returnRefundPreview <= 0}
+                className="btn-primary"
+              >
+                {returnSubmitting ? "Processing..." : "Process refund"}
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );

@@ -141,5 +141,8 @@ private fun notificationVisual(kind: String): Triple<ImageVector, Color, Color> 
     "PURCHASE_REQUEST_RESOLVED" -> Triple(Icons.Default.AssignmentTurnedIn, StockMateColors.Brand600, StockMateColors.Brand100)
     "PURCHASE_REQUEST", "STOCK_ADJUSTMENT_REQUEST", "SALE_VOID_REQUEST" ->
         Triple(Icons.Default.AssignmentTurnedIn, StockMateColors.Violet600, StockMateColors.Violet100)
+    "PERMISSION_REQUEST" -> Triple(Icons.Default.Key, StockMateColors.Violet600, StockMateColors.Violet100)
+    "PERMISSION_REQUEST_RESOLVED" -> Triple(Icons.Default.VerifiedUser, StockMateColors.Brand600, StockMateColors.Brand100)
+    "STOCK_TRANSFER" -> Triple(Icons.Default.SwapHoriz, StockMateColors.Sky600, StockMateColors.Sky100)
     else -> Triple(Icons.Default.CheckCircle, StockMateColors.Brand600, StockMateColors.Brand100)
 }

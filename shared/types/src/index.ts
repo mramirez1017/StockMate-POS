@@ -18,7 +18,17 @@ export type StockMovementType =
   | "SALE"
   | "DISPOSAL"
   | "ADJUSTMENT"
-  | "RETURN";
+  | "RETURN"
+  | "TRANSFER_OUT"
+  | "TRANSFER_IN";
+export type StockTransferStatus =
+  | "PENDING_APPROVAL"
+  | "IN_TRANSIT"
+  | "COMPLETED"
+  | "REJECTED"
+  | "CANCELLED";
+export type StockCountStatus = "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+export type StockCountScope = "FULL" | "PARTIAL";
 export type DisposalReason =
   | "EXPIRED"
   | "DAMAGED"
@@ -28,7 +38,7 @@ export type DisposalReason =
   | "DISPOSED"
   | "OTHER";
 export type PromoType = "PERCENTAGE" | "FIXED" | "PROMO_PRICE" | "BUY_X_GET_Y";
-export type SaleStatus = "COMPLETED" | "VOIDED" | "REFUNDED";
+export type SaleStatus = "COMPLETED" | "VOIDED" | "REFUNDED" | "PARTIALLY_REFUNDED";
 
 export type SaleVoidRequestStatus = "PENDING" | "APPROVED" | "REJECTED";
 
@@ -184,6 +194,14 @@ export interface Product {
   unitSize?: number;
   /** How inventory is counted — often pcs when unitSize is set */
   stockUnit?: string;
+  /**
+   * Pieces contained in one purchase pack (e.g. 50 for a box of 50 tablets).
+   * Stock is always counted in base units (pieces); the pack is only a
+   * purchasing/receiving convenience. Undefined / <=1 means no pack.
+   */
+  unitsPerPack?: number;
+  /** Human label for the pack, e.g. "box", "case", "pack". */
+  packLabel?: string;
   sellingPrice: number;
   reorderLevel: number;
   criticalLevel: number;
@@ -384,6 +402,13 @@ export interface SaleItem {
   promoId?: string;
 }
 
+/** One tender in a (possibly split) payment. */
+export interface SalePayment {
+  method: string;
+  amount: number;
+  reference?: string;
+}
+
 export interface Sale {
   id: string;
   storeId: string;
@@ -393,9 +418,14 @@ export interface Sale {
   items: SaleItem[];
   subtotal: number;
   discount: number;
+  /** Manual whole-order discount applied at the register (cashier override). */
+  manualDiscount?: number;
+  manualDiscountReason?: string;
   tax: number;
   total: number;
   paymentMethod: string;
+  /** Tender breakdown when more than one method is used (paymentMethod = "SPLIT"). */
+  payments?: SalePayment[];
   /** GCash / bank transfer reference */
   paymentReference?: string;
   /** PWD or Senior Citizen 20% discount applied */
@@ -412,6 +442,61 @@ export interface Sale {
   pendingVoidRequestId?: string;
   voidedBy?: string;
   voidedAt?: number;
+  /** Sum of all refunds processed against this sale. */
+  refundedTotal?: number;
+  createdAt: number;
+}
+
+export interface SaleReturnItem {
+  productId: string;
+  productName: string;
+  /** Quantity being returned in this transaction. */
+  quantity: number;
+  unitPrice: number;
+  refundAmount: number;
+  /** Whether the returned units go back into sellable inventory. */
+  restock: boolean;
+}
+
+/** A (partial or full) return/refund against a completed sale. */
+export interface SaleReturn {
+  id: string;
+  storeId: string;
+  branchId: string;
+  saleId: string;
+  items: SaleReturnItem[];
+  refundTotal: number;
+  reason: string;
+  refundMethod: string;
+  processedBy: string;
+  processedByName: string;
+  createdAt: number;
+}
+
+export interface ParkedSaleItem {
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+}
+
+/**
+ * A held / parked cart so a cashier can suspend a transaction (e.g. customer
+ * forgot their wallet) and resume it later — possibly on another terminal.
+ * Lives at stores/{storeId}/parkedSales/{id}. Removed when resumed or voided.
+ */
+export interface ParkedSale {
+  id: string;
+  storeId: string;
+  branchId: string;
+  label: string;
+  items: ParkedSaleItem[];
+  note?: string;
+  customerName?: string;
+  itemCount: number;
+  estimatedTotal: number;
+  parkedBy: string;
+  parkedByName: string;
   createdAt: number;
 }
 
@@ -499,6 +584,100 @@ export interface CriticalStock {
   criticalLevel: number;
   reorderLevel: number;
   suggestedOrderQty: number;
+  updatedAt: number;
+}
+
+export interface StockTransferItem {
+  productId: string;
+  productName: string;
+  /** Quantity requested / dispatched from the source branch. */
+  quantity: number;
+  /** Quantity confirmed at the destination (defaults to quantity on receive). */
+  receivedQty?: number;
+}
+
+/**
+ * Movement of stock between two branches of the same store.
+ * Flow: PENDING_APPROVAL (manager requested) → IN_TRANSIT (admin approved →
+ *       deducted from source) → COMPLETED (received, added to destination).
+ * An admin-created transfer skips approval and starts IN_TRANSIT directly.
+ * REJECTED ends a pending request with no stock movement. CANCELLED returns
+ * any in-transit stock to the source branch.
+ */
+export interface StockTransfer {
+  id: string;
+  storeId: string;
+  transferNumber: string;
+  fromBranchId: string;
+  toBranchId: string;
+  status: StockTransferStatus;
+  items: StockTransferItem[];
+  notes?: string;
+  requestedBy: string;
+  requestedByName: string;
+  /** Admin who approved the request (or the admin who created it directly). */
+  approvedBy?: string;
+  approvedByName?: string;
+  approvedAt?: number;
+  /** The OUT event from the source branch happens at approval time. */
+  dispatchedBy?: string;
+  dispatchedByName?: string;
+  dispatchedAt?: number;
+  receivedBy?: string;
+  receivedByName?: string;
+  receivedAt?: number;
+  rejectedBy?: string;
+  rejectedByName?: string;
+  rejectedAt?: number;
+  rejectReason?: string;
+  cancelledBy?: string;
+  cancelledByName?: string;
+  cancelledAt?: number;
+  cancelReason?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface StockCountItem {
+  productId: string;
+  productName: string;
+  /** On-hand stock snapshotted when the count session opened. */
+  expectedQty: number;
+  /** Physical quantity entered by the counter (undefined until counted). */
+  countedQty?: number;
+  /** countedQty - expectedQty, set on submit. */
+  variance?: number;
+}
+
+/**
+ * A physical stock-take / cycle-count session for one branch. Opening the
+ * session snapshots expected quantities; submitting it posts ADJUSTMENT stock
+ * movements for every non-zero variance so the system matches the shelf count.
+ */
+export interface StockCount {
+  id: string;
+  storeId: string;
+  branchId: string;
+  countNumber: string;
+  scope: StockCountScope;
+  status: StockCountStatus;
+  items: StockCountItem[];
+  notes?: string;
+  /** Totals computed on submit. */
+  totalVarianceUnits?: number;
+  countedItems?: number;
+  varianceItems?: number;
+  startedBy: string;
+  startedByName: string;
+  startedAt: number;
+  completedBy?: string;
+  completedByName?: string;
+  completedAt?: number;
+  cancelledBy?: string;
+  cancelledByName?: string;
+  cancelledAt?: number;
+  cancelReason?: string;
+  createdAt: number;
   updatedAt: number;
 }
 
@@ -612,7 +791,10 @@ export type NotificationKind =
   | "SALE_VOID_REQUEST"
   | "SALE_VOID_RESOLVED"
   | "PERMISSION_REQUEST"
-  | "PERMISSION_REQUEST_RESOLVED";
+  | "PERMISSION_REQUEST_RESOLVED"
+  | "STOCK_TRANSFER"
+  | "SALE_RETURN"
+  | "STOCK_COUNT";
 
 /**
  * Per-recipient in-app notification. One doc is written per recipient so unread

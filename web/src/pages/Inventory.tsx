@@ -10,7 +10,7 @@ import LoadingSpinner from "@/components/LoadingSpinner";
 import BranchFilter from "@/components/BranchFilter";
 import { branchScopedQuery, isStoreWideAccess } from "@/lib/branchScope";
 import { statusBadgeClass, stockStatus } from "@/lib/format";
-import { formatProductLabel, formatProductMeasure, productSearchText } from "@/lib/productUnits";
+import { formatPackNote, formatProductLabel, formatProductMeasure, productSearchText } from "@/lib/productUnits";
 import { branchName, useBranches } from "@/lib/useBranches";
 import { ProgressBar } from "@/components/Charts";
 import { TxnBadge } from "@/components/TxnIcon";
@@ -186,11 +186,13 @@ export default function Inventory() {
             render: (i) => {
               const tone = i.currentStock <= i.criticalLevel ? "danger" : i.currentStock <= i.reorderLevel ? "warn" : "ok";
               const max = Math.max(i.reorderLevel * 1.5, i.currentStock, 1);
+              const packNote = i.product ? formatPackNote(i.product, i.currentStock) : "";
               return (
                 <div className="min-w-[7rem]">
                   <span className={i.currentStock <= i.criticalLevel ? "font-semibold text-red-600" : "font-medium"}>
-                    {i.currentStock}
+                    {i.currentStock} pcs
                   </span>
+                  {packNote && <span className="ml-1 text-[11px] text-slate-400">{packNote}</span>}
                   <ProgressBar value={i.currentStock} max={max} tone={tone} size="sm" className="mt-1" />
                 </div>
               );

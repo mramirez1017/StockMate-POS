@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
-import { Minus, Plus, Search, Trash2, Barcode, Camera } from "lucide-react";
+import { Minus, Plus, Search, Trash2, Barcode, Camera, Pause, Layers, X } from "lucide-react";
 import { db } from "@/firebase";
 import { useAuth } from "@/contexts/AuthContext";
-import { Product, Sale, BranchInventory } from "@stockmate/types";
+import { Product, Sale, BranchInventory, ParkedSale } from "@stockmate/types";
 import PageHeader from "@/components/PageHeader";
 import Modal from "@/components/Modal";
 import BarcodeScannerModal from "@/components/BarcodeScannerModal";
@@ -14,6 +14,7 @@ import { parseMoney, sanitizeMoneyInput } from "@/lib/moneyInput";
 import { estimateSaleTotal, roundMoney, tenderCoversTotal } from "@/lib/posCheckout";
 import { formatProductLabel, formatStockDetail, productSearchText } from "@/lib/productUnits";
 import { isStoreWideAccess } from "@/lib/branchScope";
+import { canChangePrice } from "@/lib/permissions";
 import { branchName, useBranches } from "@/lib/useBranches";
 import { api } from "@/lib/api";
 import { callableErrorMessage } from "@/lib/callableError";
@@ -25,6 +26,13 @@ interface CartLine {
 }
 
 const PAYMENT_METHODS = ["CASH", "CARD", "GCASH"] as const;
+type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+
+interface SplitRow {
+  method: PaymentMethod;
+  amount: string;
+  reference: string;
+}
 
 function SaleTotals({ sale }: { sale: Sale }) {
   return (
@@ -37,6 +45,12 @@ function SaleTotals({ sale }: { sale: Sale }) {
         <div className="flex justify-between text-emerald-700">
           <span>Promo discount</span>
           <span>-{formatCurrency(sale.discount)}</span>
+        </div>
+      )}
+      {(sale.manualDiscount ?? 0) > 0 && (
+        <div className="flex justify-between text-emerald-700">
+          <span>Manual discount{sale.manualDiscountReason ? ` · ${sale.manualDiscountReason}` : ""}</span>
+          <span>-{formatCurrency(sale.manualDiscount!)}</span>
         </div>
       )}
       {(sale.pwdSeniorDiscountAmount ?? 0) > 0 && (
@@ -59,6 +73,16 @@ function SaleTotals({ sale }: { sale: Sale }) {
         <span>Payment</span>
         <span>{sale.paymentMethod}</span>
       </div>
+      {sale.payments && sale.payments.length > 1 && (
+        <div className="space-y-0.5 rounded-md bg-slate-50 px-2 py-1.5 text-xs text-slate-500">
+          {sale.payments.map((p, i) => (
+            <div key={i} className="flex justify-between">
+              <span>{p.method}{p.reference ? ` · ${p.reference}` : ""}</span>
+              <span>{formatCurrency(p.amount)}</span>
+            </div>
+          ))}
+        </div>
+      )}
       {sale.paymentReference && (
         <div className="flex justify-between text-slate-500">
           <span>Reference no.</span>
@@ -109,17 +133,25 @@ export default function Pos() {
   const [barcode, setBarcode] = useState("");
   const [cart, setCart] = useState<CartLine[]>([]);
   const [branchId, setBranchId] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<(typeof PAYMENT_METHODS)[number]>("CASH");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CASH");
   const [pwdOrSenior, setPwdOrSenior] = useState(false);
   const [amountTendered, setAmountTendered] = useState("");
   const [gcashReference, setGcashReference] = useState("");
+  const [manualDiscount, setManualDiscount] = useState("");
+  const [manualDiscountReason, setManualDiscountReason] = useState("");
+  const [splitMode, setSplitMode] = useState(false);
+  const [splitRows, setSplitRows] = useState<SplitRow[]>([{ method: "CASH", amount: "", reference: "" }]);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastSale, setLastSale] = useState<Sale | null>(null);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [parkedSales, setParkedSales] = useState<ParkedSale[]>([]);
+  const [parkedOpen, setParkedOpen] = useState(false);
+  const [parking, setParking] = useState(false);
   const barcodeRef = useRef<HTMLInputElement>(null);
   const cameraScanEnabled = shouldOfferCameraScan();
+  const allowManualDiscount = user ? canChangePrice(user) : false;
 
   useEffect(() => {
     if (!storeId) return;
@@ -153,6 +185,21 @@ export default function Pos() {
       ),
       (snap) => {
         setInventory(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as BranchInventory));
+      },
+    );
+  }, [storeId, branchId]);
+
+  useEffect(() => {
+    if (!storeId || !branchId) {
+      setParkedSales([]);
+      return;
+    }
+    return onSnapshot(
+      query(collection(db, "stores", storeId, "parkedSales"), where("branchId", "==", branchId)),
+      (snap) => {
+        setParkedSales(
+          snap.docs.map((d) => ({ id: d.id, ...d.data() }) as ParkedSale).sort((a, b) => b.createdAt - a.createdAt),
+        );
       },
     );
   }, [storeId, branchId]);
@@ -195,9 +242,11 @@ export default function Pos() {
   const cartSubtotal = cart.reduce((sum, line) => sum + line.product.sellingPrice * line.quantity, 0);
   const itemCount = cart.reduce((sum, line) => sum + line.quantity, 0);
 
+  const manualDiscountValue = allowManualDiscount ? parseMoney(manualDiscount) ?? 0 : 0;
+
   const checkoutEstimate = useMemo(
-    () => estimateSaleTotal(cartSubtotal, pwdOrSenior),
-    [cartSubtotal, pwdOrSenior],
+    () => estimateSaleTotal(cartSubtotal, pwdOrSenior, 0, manualDiscountValue),
+    [cartSubtotal, pwdOrSenior, manualDiscountValue],
   );
 
   const tenderedAmount = parseMoney(amountTendered);
@@ -208,21 +257,44 @@ export default function Pos() {
       ? roundMoney(tenderedAmount! - checkoutEstimate.total)
       : null;
 
+  const splitPaid = useMemo(
+    () => splitRows.reduce((sum, r) => sum + (parseMoney(r.amount) ?? 0), 0),
+    [splitRows],
+  );
+  const splitRemaining = roundMoney(checkoutEstimate.total - splitPaid);
+  const splitCovers = tenderCoversTotal(splitPaid, checkoutEstimate.total);
+  const splitGcashOk = splitRows.every((r) => r.method !== "GCASH" || r.reference.trim().length > 0);
+  const splitHasCash = splitRows.some((r) => r.method === "CASH");
+  // Non-cash tenders can't make change, so they must total exactly the due amount.
+  const splitExactWhenNoCash = splitHasCash || Math.round(splitPaid * 100) === Math.round(checkoutEstimate.total * 100);
+
   const openCheckout = () => {
     setError(null);
     setPwdOrSenior(false);
     setAmountTendered("");
     setGcashReference("");
     setPaymentMethod("CASH");
+    setManualDiscount("");
+    setManualDiscountReason("");
+    setSplitMode(false);
+    setSplitRows([{ method: "CASH", amount: "", reference: "" }]);
     setCheckoutOpen(true);
   };
 
-  const canComplete =
-    paymentMethod === "CASH"
+  const canComplete = splitMode
+    ? splitCovers && splitGcashOk && splitExactWhenNoCash
+    : paymentMethod === "CASH"
       ? tenderedSufficient
       : paymentMethod === "GCASH"
         ? gcashReference.trim().length > 0
         : true;
+
+  const updateSplitRow = (idx: number, patch: Partial<SplitRow>) =>
+    setSplitRows((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+  const addSplitRow = () =>
+    setSplitRows((prev) => [...prev, { method: "CASH", amount: "", reference: "" }]);
+  const removeSplitRow = (idx: number) =>
+    setSplitRows((prev) => (prev.length === 1 ? prev : prev.filter((_, i) => i !== idx)));
 
   const addProduct = (product: Product) => {
     if (!branchId) {
@@ -312,14 +384,23 @@ export default function Pos() {
     }
     if (cart.length === 0) return;
 
-    if (paymentMethod === "CASH") {
-      if (!tenderedSufficient) {
-        setError("Amount tendered must be at least the total due.");
+    if (splitMode) {
+      if (!splitCovers) {
+        setError("Split payments must cover at least the total due.");
         return;
       }
-    }
-
-    if (paymentMethod === "GCASH" && !gcashReference.trim()) {
+      if (!splitGcashOk) {
+        setError("Enter a reference number for each GCash split payment.");
+        return;
+      }
+      if (!splitExactWhenNoCash) {
+        setError("Without a cash tender, split payments must total exactly the amount due.");
+        return;
+      }
+    } else if (paymentMethod === "CASH" && !tenderedSufficient) {
+      setError("Amount tendered must be at least the total due.");
+      return;
+    } else if (paymentMethod === "GCASH" && !gcashReference.trim()) {
       setError("GCash reference number is required.");
       return;
     }
@@ -327,13 +408,21 @@ export default function Pos() {
     setCheckingOut(true);
     setError(null);
     try {
+      const payments = splitMode
+        ? splitRows
+            .filter((r) => (parseMoney(r.amount) ?? 0) > 0)
+            .map((r) => ({ method: r.method, amount: parseMoney(r.amount)!, reference: r.reference.trim() || undefined }))
+        : undefined;
       const result = await api.createSale({
         branchId,
         items: cart.map((l) => ({ productId: l.product.id, quantity: l.quantity })),
-        paymentMethod,
+        paymentMethod: splitMode ? (payments && payments.length === 1 ? payments[0].method : "SPLIT") : paymentMethod,
+        payments,
         pwdOrSeniorDiscount: pwdOrSenior || undefined,
-        amountTendered: paymentMethod === "CASH" ? tenderedAmount! : undefined,
-        paymentReference: paymentMethod === "GCASH" ? gcashReference.trim() : undefined,
+        amountTendered: !splitMode && paymentMethod === "CASH" ? tenderedAmount! : undefined,
+        paymentReference: !splitMode && paymentMethod === "GCASH" ? gcashReference.trim() : undefined,
+        manualDiscount: manualDiscountValue > 0 ? manualDiscountValue : undefined,
+        manualDiscountReason: manualDiscountValue > 0 ? manualDiscountReason.trim() || undefined : undefined,
       });
       const data = result.data as { saleId: string; sale: Sale };
       setLastSale(data.sale);
@@ -342,10 +431,65 @@ export default function Pos() {
       setPwdOrSenior(false);
       setAmountTendered("");
       setGcashReference("");
+      setManualDiscount("");
+      setManualDiscountReason("");
+      setSplitMode(false);
+      setSplitRows([{ method: "CASH", amount: "", reference: "" }]);
     } catch (err) {
       setError(callableErrorMessage(err, "Checkout failed"));
     } finally {
       setCheckingOut(false);
+    }
+  };
+
+  const handleParkSale = async () => {
+    if (!branchId || cart.length === 0) return;
+    const label = window.prompt("Label this held sale (optional):") ?? undefined;
+    setParking(true);
+    setError(null);
+    try {
+      await api.parkSale({
+        branchId,
+        items: cart.map((l) => ({ productId: l.product.id, quantity: l.quantity })),
+        label: label?.trim() || undefined,
+      });
+      setCart([]);
+    } catch (err) {
+      setError(callableErrorMessage(err, "Failed to hold sale"));
+    } finally {
+      setParking(false);
+    }
+  };
+
+  const resumeParked = async (parked: ParkedSale) => {
+    if (cart.length > 0 && !window.confirm("Replace the current cart with this held sale?")) return;
+    const lines: CartLine[] = [];
+    const missing: string[] = [];
+    for (const item of parked.items) {
+      const product = products.find((p) => p.id === item.productId);
+      if (!product) {
+        missing.push(item.productName);
+        continue;
+      }
+      const available = branchStock(stockByProduct, product.id);
+      lines.push({ product, quantity: Math.min(item.quantity, Math.max(0, available)) || 0 });
+    }
+    setCart(lines.filter((l) => l.quantity > 0));
+    setParkedOpen(false);
+    setError(missing.length ? `Some items were unavailable and skipped: ${missing.join(", ")}.` : null);
+    try {
+      await api.deleteParkedSale({ parkedSaleId: parked.id });
+    } catch {
+      /* listener will reconcile */
+    }
+  };
+
+  const discardParked = async (parked: ParkedSale) => {
+    if (!window.confirm(`Discard held sale "${parked.label}"?`)) return;
+    try {
+      await api.deleteParkedSale({ parkedSaleId: parked.id });
+    } catch (err) {
+      window.alert(callableErrorMessage(err, "Failed to discard"));
     }
   };
 
@@ -496,17 +640,41 @@ export default function Pos() {
         {/* Cart */}
         <div className="flex min-h-0 flex-col lg:col-span-2">
           <div className="card flex min-h-0 flex-1 flex-col">
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-4 flex items-center justify-between gap-2">
               <h2 className="text-lg font-semibold text-slate-900">Cart</h2>
-              {cart.length > 0 && (
+              <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={clearCart}
-                  className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-red-600"
+                  onClick={() => setParkedOpen(true)}
+                  className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-brand-600"
                 >
-                  <Trash2 size={14} /> Clear
+                  <Layers size={14} /> Held
+                  {parkedSales.length > 0 && (
+                    <span className="rounded-full bg-brand-100 px-1.5 text-[10px] font-bold text-brand-700">
+                      {parkedSales.length}
+                    </span>
+                  )}
                 </button>
-              )}
+                {cart.length > 0 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleParkSale}
+                      disabled={parking}
+                      className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-amber-600 disabled:opacity-50"
+                    >
+                      <Pause size={14} /> Hold
+                    </button>
+                    <button
+                      type="button"
+                      onClick={clearCart}
+                      className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-red-600"
+                    >
+                      <Trash2 size={14} /> Clear
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
 
             {error && (
@@ -633,74 +801,156 @@ export default function Pos() {
             </div>
           </label>
 
-          <div>
-            <p className="mb-1.5 text-sm font-medium text-slate-700">Payment method</p>
-            <div className="space-y-2">
-              {PAYMENT_METHODS.map((method) => (
-                <label
-                  key={method}
-                  className={`flex cursor-pointer items-center gap-3 rounded-lg border px-4 py-2.5 transition ${
-                    paymentMethod === method
-                      ? "border-emerald-500 bg-emerald-50"
-                      : "border-slate-200 hover:border-slate-300"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="payment"
-                    checked={paymentMethod === method}
-                    onChange={() => setPaymentMethod(method)}
-                    className="text-emerald-600"
-                  />
-                  <span className="font-medium text-slate-800">{method}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          {paymentMethod === "CASH" && (
-            <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Amount tendered</label>
+          {allowManualDiscount && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <label className="mb-1 block text-sm font-medium text-slate-700">Manual discount (₱)</label>
+              <div className="flex gap-2">
                 <input
                   type="text"
                   inputMode="decimal"
-                  className="input-field"
+                  className="input-field w-28"
                   placeholder="0.00"
-                  value={amountTendered}
-                  onChange={(e) => setAmountTendered(sanitizeMoneyInput(e.target.value))}
-                  autoFocus
+                  value={manualDiscount}
+                  onChange={(e) => setManualDiscount(sanitizeMoneyInput(e.target.value))}
+                />
+                <input
+                  className="input-field min-w-0 flex-1"
+                  placeholder="Reason (optional)"
+                  value={manualDiscountReason}
+                  onChange={(e) => setManualDiscountReason(e.target.value)}
                 />
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-600">Change</span>
-                <span
-                  className={`font-semibold ${
-                    tenderedAmount != null && !tenderedSufficient
-                      ? "text-red-600"
-                      : "text-slate-900"
-                  }`}
-                >
-                  {tenderedAmount == null
-                    ? "—"
-                    : !tenderedSufficient
-                      ? "Insufficient"
-                      : formatCurrency(changeDue ?? 0)}
-                </span>
-              </div>
+              {manualDiscountValue > 0 && checkoutEstimate.appliedManualDiscount < manualDiscountValue && (
+                <p className="mt-1 text-xs text-amber-600">Capped to the amount due.</p>
+              )}
             </div>
           )}
 
-          {paymentMethod === "GCASH" && (
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">GCash reference number *</label>
-              <input
-                className="input-field font-mono"
-                placeholder="Transaction reference"
-                value={gcashReference}
-                onChange={(e) => setGcashReference(e.target.value)}
-                autoFocus
-              />
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-slate-700">Payment method</p>
+            <button
+              type="button"
+              onClick={() => setSplitMode((v) => !v)}
+              className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium transition ${
+                splitMode ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-slate-200 text-slate-600 hover:border-slate-300"
+              }`}
+            >
+              <Layers size={13} /> Split payment
+            </button>
+          </div>
+
+          {!splitMode ? (
+            <>
+              <div className="space-y-2">
+                {PAYMENT_METHODS.map((method) => (
+                  <label
+                    key={method}
+                    className={`flex cursor-pointer items-center gap-3 rounded-lg border px-4 py-2.5 transition ${
+                      paymentMethod === method ? "border-emerald-500 bg-emerald-50" : "border-slate-200 hover:border-slate-300"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="payment"
+                      checked={paymentMethod === method}
+                      onChange={() => setPaymentMethod(method)}
+                      className="text-emerald-600"
+                    />
+                    <span className="font-medium text-slate-800">{method}</span>
+                  </label>
+                ))}
+              </div>
+
+              {paymentMethod === "CASH" && (
+                <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">Amount tendered</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      className="input-field"
+                      placeholder="0.00"
+                      value={amountTendered}
+                      onChange={(e) => setAmountTendered(sanitizeMoneyInput(e.target.value))}
+                      autoFocus
+                    />
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-600">Change</span>
+                    <span className={`font-semibold ${tenderedAmount != null && !tenderedSufficient ? "text-red-600" : "text-slate-900"}`}>
+                      {tenderedAmount == null ? "—" : !tenderedSufficient ? "Insufficient" : formatCurrency(changeDue ?? 0)}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {paymentMethod === "GCASH" && (
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">GCash reference number *</label>
+                  <input
+                    className="input-field font-mono"
+                    placeholder="Transaction reference"
+                    value={gcashReference}
+                    onChange={(e) => setGcashReference(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              {splitRows.map((row, idx) => (
+                <div key={idx} className="space-y-2 rounded-lg border border-slate-100 bg-white p-2.5">
+                  <div className="flex items-center gap-2">
+                    <select
+                      className="input-field w-28 py-1.5"
+                      value={row.method}
+                      onChange={(e) => updateSplitRow(idx, { method: e.target.value as PaymentMethod })}
+                    >
+                      {PAYMENT_METHODS.map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      className="input-field min-w-0 flex-1 py-1.5 text-right"
+                      placeholder="0.00"
+                      value={row.amount}
+                      onChange={(e) => updateSplitRow(idx, { amount: sanitizeMoneyInput(e.target.value) })}
+                    />
+                    {splitRows.length > 1 && (
+                      <button type="button" onClick={() => removeSplitRow(idx)} className="shrink-0 text-slate-400 hover:text-red-500" aria-label="Remove tender">
+                        <X size={16} />
+                      </button>
+                    )}
+                  </div>
+                  {row.method === "GCASH" && (
+                    <input
+                      className="input-field font-mono text-sm"
+                      placeholder="GCash reference *"
+                      value={row.reference}
+                      onChange={(e) => updateSplitRow(idx, { reference: e.target.value })}
+                    />
+                  )}
+                </div>
+              ))}
+              <button type="button" onClick={addSplitRow} className="btn-secondary w-full py-1.5 text-sm">
+                <Plus size={14} className="mr-1" /> Add tender
+              </button>
+              <div className="flex justify-between border-t border-slate-200 pt-2 text-sm">
+                <span className="text-slate-600">Paid</span>
+                <span className="font-semibold tabular-nums">{formatCurrency(splitPaid)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-600">{splitRemaining > 0 ? "Remaining" : "Change"}</span>
+                <span className={`font-semibold tabular-nums ${splitRemaining > 0 ? "text-red-600" : "text-slate-900"}`}>
+                  {formatCurrency(Math.abs(splitRemaining))}
+                </span>
+              </div>
+              {!splitHasCash && splitRemaining < 0 && (
+                <p className="text-xs text-amber-600">Add a CASH tender to give change, or match the total exactly.</p>
+              )}
             </div>
           )}
 
@@ -709,6 +959,12 @@ export default function Pos() {
               <span className="text-slate-600">Subtotal</span>
               <span>{formatCurrency(cartSubtotal)}</span>
             </div>
+            {checkoutEstimate.appliedManualDiscount > 0 && (
+              <div className="flex justify-between text-emerald-700">
+                <span>Manual discount</span>
+                <span>-{formatCurrency(checkoutEstimate.appliedManualDiscount)}</span>
+              </div>
+            )}
             {checkoutEstimate.pwdSeniorDiscountAmount > 0 && (
               <div className="flex justify-between text-emerald-700">
                 <span>PWD / Senior (20%)</span>
@@ -773,6 +1029,40 @@ export default function Pos() {
               New sale
             </button>
           </div>
+        )}
+      </Modal>
+
+      <Modal open={parkedOpen} onClose={() => setParkedOpen(false)} title="Held sales">
+        {parkedSales.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-10 text-center text-slate-400">
+            <Layers size={28} />
+            <p className="text-sm">No held sales for this branch.</p>
+            <p className="text-xs">Use “Hold” in the cart to suspend a transaction.</p>
+          </div>
+        ) : (
+          <ul className="space-y-2">
+            {parkedSales.map((p) => (
+              <li key={p.id} className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium text-slate-900">{p.label}</p>
+                  <p className="text-xs text-slate-500">
+                    {p.itemCount} item(s) · ~{formatCurrency(p.estimatedTotal)} · {p.parkedByName} · {formatDate(p.createdAt)}
+                  </p>
+                </div>
+                <button type="button" onClick={() => resumeParked(p)} className="btn-primary shrink-0 px-3 py-1.5 text-sm">
+                  Resume
+                </button>
+                <button
+                  type="button"
+                  onClick={() => discardParked(p)}
+                  className="shrink-0 text-slate-400 hover:text-red-500"
+                  aria-label="Discard held sale"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </li>
+            ))}
+          </ul>
         )}
       </Modal>
     </div>

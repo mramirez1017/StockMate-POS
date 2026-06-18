@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { doc, onSnapshot } from "firebase/firestore";
+import { collection, doc, getDocs, onSnapshot } from "firebase/firestore";
 import { BadgeCheck, Package, AlertTriangle } from "lucide-react";
 import { db } from "@/firebase";
 import { useAuth } from "@/contexts/AuthContext";
-import { PurchaseOrder } from "@stockmate/types";
+import { Product, PurchaseOrder } from "@stockmate/types";
 import PageHeader from "@/components/PageHeader";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import IntegerInput from "@/components/IntegerInput";
@@ -15,8 +15,11 @@ import { ProgressBar } from "@/components/Charts";
 import { isStoreAdmin } from "@/lib/permissions";
 import { isStoreWideAccess } from "@/lib/branchScope";
 import { parseInteger } from "@/lib/integerInput";
+import { hasPack, packLabelOf, formatPackBreakdown } from "@/lib/productUnits";
 import { api } from "@/lib/api";
 import { callableErrorMessage } from "@/lib/callableError";
+
+type PackInfo = { unitsPerPack?: number | null; packLabel?: string | null };
 
 interface ReceiveItem {
   productId: string;
@@ -34,6 +37,7 @@ export default function DeliveryChecklist() {
   const navigate = useNavigate();
   const [po, setPo] = useState<PurchaseOrder | null>(null);
   const [items, setItems] = useState<ReceiveItem[]>([]);
+  const [packByProduct, setPackByProduct] = useState<Record<string, PackInfo>>({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [completing, setCompleting] = useState(false);
@@ -62,6 +66,19 @@ export default function DeliveryChecklist() {
     });
     return () => unsub();
   }, [storeId, poId]);
+
+  // Pull pack sizes so receiving can be entered in boxes (stock stays in pieces).
+  useEffect(() => {
+    if (!storeId) return;
+    getDocs(collection(db, "stores", storeId, "products")).then((snap) => {
+      const map: Record<string, PackInfo> = {};
+      snap.docs.forEach((d) => {
+        const p = d.data() as Product;
+        map[d.id] = { unitsPerPack: p.unitsPerPack, packLabel: p.packLabel };
+      });
+      setPackByProduct(map);
+    });
+  }, [storeId]);
 
   const handleComplete = async () => {
     if (!poId) return;
@@ -144,6 +161,10 @@ export default function DeliveryChecklist() {
           const damaged = parseInteger(item.damagedQty, 0);
           const pct = item.expectedQty > 0 ? Math.min(100, Math.round((received / item.expectedQty) * 100)) : 0;
           const complete = received >= item.expectedQty && item.expectedQty > 0;
+          const pack = packByProduct[item.productId] ?? {};
+          const packed = hasPack(pack);
+          const upp = packed ? (pack.unitsPerPack as number) : 0;
+          const expectedBreakdown = packed ? formatPackBreakdown(pack, item.expectedQty) : "";
           return (
           <div key={item.productId} className="card hover-lift">
             <div className="mb-3 flex items-start gap-3">
@@ -152,7 +173,9 @@ export default function DeliveryChecklist() {
               </div>
               <div className="min-w-0 flex-1">
                 <h3 className="truncate font-semibold text-slate-900">{item.productName}</h3>
-                <p className="text-sm text-slate-500">Expected: {item.expectedQty}</p>
+                <p className="text-sm text-slate-500">
+                  Expected: {item.expectedQty} pcs{expectedBreakdown ? ` (${expectedBreakdown})` : ""}
+                </p>
               </div>
               <span className={`badge ${complete ? "badge-green" : "badge-blue"}`}>
                 {received}/{item.expectedQty}
@@ -164,9 +187,31 @@ export default function DeliveryChecklist() {
                 <AlertTriangle size={13} /> {damaged} flagged as damaged
               </p>
             )}
+            {packed && (
+              <div className="mb-4 rounded-lg border border-slate-100 bg-slate-50 p-3">
+                <div className="flex flex-wrap items-end gap-3">
+                  <div className="w-28">
+                    <IntegerInput
+                      label={`${packLabelOf(pack)}es received`}
+                      value={upp > 0 && received % upp === 0 ? String(received / upp) : ""}
+                      onChange={(boxes) => {
+                        const next = [...items];
+                        next[idx] = { ...next[idx], receivedQty: String(parseInteger(boxes, 0) * upp) };
+                        setItems(next);
+                      }}
+                      placeholder="0"
+                    />
+                  </div>
+                  <p className="pb-2 text-xs text-slate-500">
+                    × {upp} pcs/{packLabelOf(pack)} = <span className="font-medium text-slate-700">{received} pcs</span>
+                    {received % upp !== 0 && " (adjust loose pieces below)"}
+                  </p>
+                </div>
+              </div>
+            )}
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <IntegerInput
-                label="Received Qty *"
+                label="Received Qty (pcs) *"
                 value={item.receivedQty}
                 onChange={(receivedQty) => {
                   const next = [...items];

@@ -5,7 +5,9 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -14,6 +16,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.PauseCircleOutline
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Remove
@@ -23,11 +27,16 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.stockmate.pos.data.models.Product
@@ -61,7 +70,13 @@ fun PosScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var showCheckout by remember { mutableStateOf(false) }
+    var showParked by remember { mutableStateOf(false) }
     val totalDue = uiState.checkoutEstimate.total
+
+    LaunchedEffect(user.id) {
+        viewModel.setAllowManualDiscount(user.canChangePrice)
+        viewModel.startParkedObserver(user)
+    }
 
     // Auto-dismiss the "added to cart" confirmation.
     LaunchedEffect(uiState.addedNotice) {
@@ -77,6 +92,15 @@ fun PosScreen(
                 title = "POS",
                 onBack = onBack,
                 actions = {
+                    if (uiState.parkedSales.isNotEmpty()) {
+                        BadgedBox(
+                            badge = { Badge { Text("${uiState.parkedSales.size}") } },
+                        ) {
+                            IconButton(onClick = { showParked = true }) {
+                                Icon(Icons.Default.Layers, contentDescription = "Held sales", tint = StockMateColors.Slate600)
+                            }
+                        }
+                    }
                     IconButton(onClick = onNavigateToPrinter) {
                         Icon(Icons.Default.Print, contentDescription = "Printer", tint = StockMateColors.Slate600)
                     }
@@ -221,7 +245,11 @@ fun PosScreen(
                         onAdd = { viewModel.addFromSearch(it) },
                     )
                     uiState.cart.isEmpty() -> EmptyCart()
-                    else -> CartList(uiState = uiState, viewModel = viewModel)
+                    else -> CartList(
+                        uiState = uiState,
+                        viewModel = viewModel,
+                        onHold = { viewModel.parkCurrentCart(user, null) },
+                    )
                 }
             }
         }
@@ -244,6 +272,93 @@ fun PosScreen(
                 }
             },
         )
+    }
+
+    if (showParked) {
+        HeldSalesSheet(
+            uiState = uiState,
+            onResume = { parked ->
+                viewModel.resumeParked(parked)
+                showParked = false
+            },
+            onDiscard = { viewModel.deleteParked(it.id) },
+            onDismiss = { showParked = false },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HeldSalesSheet(
+    uiState: PosUiState,
+    onResume: (com.stockmate.pos.data.models.ParkedSale) -> Unit,
+    onDiscard: (com.stockmate.pos.data.models.ParkedSale) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 32.dp)
+                .windowInsetsPadding(WindowInsets.navigationBars),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text("Held sales", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            if (uiState.parkedSales.isEmpty()) {
+                Text("No held sales.", color = StockMateColors.Slate500)
+            }
+            uiState.parkedSales.forEach { parked ->
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    color = StockMateColors.Panel,
+                    border = BorderStroke(1.dp, StockMateColors.Border),
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    parked.label.ifBlank { "Held sale" },
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = StockMateColors.Slate900,
+                                )
+                                Text(
+                                    "${parked.itemCount} item(s) · ${formatCurrency(parked.estimatedTotal)} · by ${parked.parkedByName}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = StockMateColors.Slate500,
+                                )
+                            }
+                            Text(
+                                formatCurrency(parked.estimatedTotal),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = StockMateColors.Brand700,
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            StockMatePrimaryButton(
+                                text = "Resume",
+                                onClick = { onResume(parked) },
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(onClick = { onDiscard(parked) }) {
+                                Text("Discard", color = StockMateColors.Red600)
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -331,13 +446,19 @@ private fun SearchResults(
                 modifier = Modifier.padding(24.dp),
             )
         }
-        else -> LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(vertical = 8.dp),
-        ) {
-            items(uiState.searchResults, key = { it.id }) { product ->
-                SearchResultRow(product = product, onAdd = { onAdd(product) })
+        else -> {
+            val resultsState = rememberLazyListState()
+            LazyColumn(
+                state = resultsState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScrollbar(resultsState),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(vertical = 8.dp, end = 6.dp),
+            ) {
+                items(uiState.searchResults, key = { it.id }) { product ->
+                    SearchResultRow(product = product, onAdd = { onAdd(product) })
+                }
             }
         }
     }
@@ -427,7 +548,7 @@ private fun EmptyCart() {
 }
 
 @Composable
-private fun CartList(uiState: PosUiState, viewModel: PosViewModel) {
+private fun CartList(uiState: PosUiState, viewModel: PosViewModel, onHold: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
             modifier = Modifier
@@ -440,14 +561,26 @@ private fun CartList(uiState: PosUiState, viewModel: PosViewModel) {
                 Icon(Icons.Default.Inventory2, contentDescription = null, tint = StockMateColors.Slate500, modifier = Modifier.size(16.dp))
                 Text("Cart (${uiState.cart.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = StockMateColors.Slate900)
             }
-            TextButton(onClick = { viewModel.clearCart() }) {
-                Text("Clear all", color = StockMateColors.Red600, style = MaterialTheme.typography.labelMedium)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = onHold, enabled = !uiState.isParking && !uiState.isCheckingOut) {
+                    Icon(Icons.Default.PauseCircleOutline, contentDescription = null, tint = StockMateColors.Brand600, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Hold", color = StockMateColors.Brand600, style = MaterialTheme.typography.labelMedium)
+                }
+                TextButton(onClick = { viewModel.clearCart() }) {
+                    Text("Clear all", color = StockMateColors.Red600, style = MaterialTheme.typography.labelMedium)
+                }
             }
         }
+        val listState = rememberLazyListState()
         LazyColumn(
-            modifier = Modifier.weight(1f).fillMaxWidth(),
+            state = listState,
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScrollbar(listState),
             verticalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(vertical = 4.dp),
+            contentPadding = PaddingValues(vertical = 4.dp, end = 6.dp),
         ) {
             items(uiState.cart, key = { it.product.id }) { item ->
                 CartItemCard(
@@ -573,5 +706,43 @@ private fun QuantityEditor(
             focusedBorderColor = StockMateColors.Brand600,
             focusedLabelColor = StockMateColors.Brand600,
         ),
+    )
+}
+
+/**
+ * Draws a slim vertical scrollbar thumb on the trailing edge of a LazyColumn so
+ * users get a visual cue that the list scrolls. The thumb only appears when the
+ * content actually overflows the viewport.
+ */
+private fun Modifier.verticalScrollbar(
+    state: LazyListState,
+    width: Dp = 4.dp,
+    color: Color = StockMateColors.Slate400,
+): Modifier = drawWithContent {
+    drawContent()
+    val info = state.layoutInfo
+    val visible = info.visibleItemsInfo
+    val totalCount = info.totalItemsCount
+    if (totalCount == 0 || visible.isEmpty()) return@drawWithContent
+
+    val avgItemSize = (visible.sumOf { it.size } / visible.size).toFloat()
+    if (avgItemSize <= 0f) return@drawWithContent
+
+    val viewport = (info.viewportEndOffset - info.viewportStartOffset).toFloat()
+    val totalContent = avgItemSize * totalCount
+    if (totalContent <= viewport) return@drawWithContent // nothing to scroll
+
+    val scrolledPx = state.firstVisibleItemIndex * avgItemSize + state.firstVisibleItemScrollOffset
+    val minThumb = 28.dp.toPx()
+    val thumbHeight = ((viewport / totalContent) * viewport).coerceAtLeast(minThumb)
+    val maxOffset = (viewport - thumbHeight).coerceAtLeast(0f)
+    val thumbOffsetY = ((scrolledPx / (totalContent - viewport)) * maxOffset).coerceIn(0f, maxOffset)
+    val thumbWidth = width.toPx()
+
+    drawRoundRect(
+        color = color.copy(alpha = 0.55f),
+        topLeft = Offset(size.width - thumbWidth, info.viewportStartOffset + thumbOffsetY),
+        size = Size(thumbWidth, thumbHeight),
+        cornerRadius = CornerRadius(thumbWidth / 2f, thumbWidth / 2f),
     )
 }

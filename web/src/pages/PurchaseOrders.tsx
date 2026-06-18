@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, onSnapshot } from "firebase/firestore";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, Wand2, AlertTriangle, ArrowDownCircle } from "lucide-react";
 import { db } from "@/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { PurchaseOrder, Supplier, Branch, Product, Category, POStatus } from "@stockmate/types";
@@ -82,6 +82,23 @@ export default function PurchaseOrders() {
   } | null>(null);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  type ReorderPreview = {
+    branchId: string;
+    branchName: string;
+    supplierId: string;
+    itemCount: number;
+    totalUnits: number;
+    estimatedCost: number;
+    items: { productId: string; productName: string; suggestedQty: number; currentStock: number; reorderLevel: number; severity: "CRITICAL" | "LOW" }[];
+  };
+  const [reorderOpen, setReorderOpen] = useState(false);
+  const [reorderLoading, setReorderLoading] = useState(false);
+  const [reorderCreating, setReorderCreating] = useState(false);
+  const [reorderError, setReorderError] = useState<string | null>(null);
+  const [reorderPreview, setReorderPreview] = useState<ReorderPreview[] | null>(null);
+  const [reorderIncludeLow, setReorderIncludeLow] = useState(true);
+  const [reorderSkipped, setReorderSkipped] = useState(0);
 
   const MERGEABLE_STATUSES: POStatus[] = ["DRAFT", "ORDERED", "IN_TRANSIT", "PARTIALLY_RECEIVED"];
 
@@ -375,6 +392,68 @@ export default function PurchaseOrders() {
     await api.updatePurchaseOrderStatus({ purchaseOrderId: id, status });
   };
 
+  const loadReorderPreview = async (includeLowStock: boolean) => {
+    setReorderLoading(true);
+    setReorderError(null);
+    try {
+      const res = await api.generateReorderDraft({
+        branchId: branchFilter || undefined,
+        includeLowStock,
+        dryRun: true,
+      });
+      const data = res.data;
+      if (data.dryRun) {
+        setReorderPreview(data.previews);
+        setReorderSkipped(data.skippedNoSupplier);
+      }
+    } catch (err) {
+      setReorderError(callableErrorMessage(err, "Failed to build reorder suggestions"));
+      setReorderPreview([]);
+    } finally {
+      setReorderLoading(false);
+    }
+  };
+
+  const openReorder = () => {
+    setReorderOpen(true);
+    setReorderPreview(null);
+    setReorderError(null);
+    setReorderIncludeLow(true);
+    void loadReorderPreview(true);
+  };
+
+  const confirmReorder = async () => {
+    setReorderCreating(true);
+    setReorderError(null);
+    try {
+      const res = await api.generateReorderDraft({
+        branchId: branchFilter || undefined,
+        includeLowStock: reorderIncludeLow,
+        dryRun: false,
+      });
+      const data = res.data;
+      if (!data.dryRun) {
+        setReorderOpen(false);
+        setSaveNotice(
+          `Generated ${data.createdCount} draft purchase order${data.createdCount === 1 ? "" : "s"} from reorder suggestions.` +
+            (data.skippedNoSupplier > 0 ? ` ${data.skippedNoSupplier} item(s) skipped (no supplier assigned).` : ""),
+        );
+      }
+    } catch (err) {
+      setReorderError(callableErrorMessage(err, "Failed to generate purchase orders"));
+    } finally {
+      setReorderCreating(false);
+    }
+  };
+
+  const reorderTotals = useMemo(() => {
+    if (!reorderPreview) return { items: 0, units: 0, cost: 0 };
+    return reorderPreview.reduce(
+      (acc, g) => ({ items: acc.items + g.itemCount, units: acc.units + g.totalUnits, cost: acc.cost + g.estimatedCost }),
+      { items: 0, units: 0, cost: 0 },
+    );
+  }, [reorderPreview]);
+
   const canManagePo = !!user && isStoreAdmin(user);
 
   if (loading) return <LoadingSpinner />;
@@ -390,9 +469,14 @@ export default function PurchaseOrders() {
         }
         actions={
           canManagePo ? (
-            <button onClick={openCreateModal} className="btn-primary">
-              <Plus size={18} /> Create PO
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={openReorder} className="btn-secondary">
+                <Wand2 size={16} className="mr-1.5" /> Auto-reorder
+              </button>
+              <button onClick={openCreateModal} className="btn-primary">
+                <Plus size={18} /> Create PO
+              </button>
+            </div>
           ) : undefined
         }
       />
@@ -592,6 +676,108 @@ export default function PurchaseOrders() {
             </div>
           </div>
         )}
+      </Modal>
+
+      <Modal open={reorderOpen} onClose={() => !reorderCreating && setReorderOpen(false)} title="Auto-reorder suggestions" wide>
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600">
+            Scan {branchFilter ? "the selected branch" : "all branches"} for products at or below their reorder level and
+            draft purchase orders grouped by supplier. Review below, then generate — the drafts land in your PO list as{" "}
+            <span className="font-medium">DRAFT</span> so you can adjust before ordering.
+          </p>
+
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              className="rounded"
+              checked={reorderIncludeLow}
+              onChange={(e) => {
+                setReorderIncludeLow(e.target.checked);
+                void loadReorderPreview(e.target.checked);
+              }}
+            />
+            Include low-stock items (not just critical)
+          </label>
+
+          {reorderError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{reorderError}</div>
+          )}
+
+          {reorderLoading ? (
+            <div className="py-8 text-center text-sm text-slate-400">Building suggestions…</div>
+          ) : reorderPreview && reorderPreview.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 py-8 text-center text-slate-400">
+              <ArrowDownCircle size={28} />
+              <p className="text-sm">Nothing needs reordering right now.</p>
+            </div>
+          ) : reorderPreview ? (
+            <>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="rounded-lg bg-slate-50 px-3 py-2">
+                  <p className="text-lg font-bold tabular-nums text-slate-900">{reorderPreview.length}</p>
+                  <p className="text-[11px] text-slate-500">Draft PO(s)</p>
+                </div>
+                <div className="rounded-lg bg-slate-50 px-3 py-2">
+                  <p className="text-lg font-bold tabular-nums text-slate-900">{reorderTotals.items}</p>
+                  <p className="text-[11px] text-slate-500">Line items</p>
+                </div>
+                <div className="rounded-lg bg-slate-50 px-3 py-2">
+                  <p className="text-lg font-bold tabular-nums text-slate-900">₱{reorderTotals.cost.toLocaleString()}</p>
+                  <p className="text-[11px] text-slate-500">Est. cost</p>
+                </div>
+              </div>
+
+              {reorderSkipped > 0 && (
+                <p className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                  <AlertTriangle size={14} /> {reorderSkipped} low-stock item(s) skipped — assign a supplier to include them.
+                </p>
+              )}
+
+              <div className="scroll-area max-h-72 space-y-3 pr-1">
+                {reorderPreview.map((g) => (
+                  <div key={`${g.branchId}_${g.supplierId}`} className="rounded-lg border border-slate-200">
+                    <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-3 py-2 text-sm">
+                      <span className="font-semibold text-slate-800">
+                        {supplierName(g.supplierId) || "Supplier"} · {g.branchName}
+                      </span>
+                      <span className="text-xs text-slate-500">{g.itemCount} item(s) · {g.totalUnits} unit(s)</span>
+                    </div>
+                    <table className="w-full text-sm">
+                      <tbody className="divide-y divide-slate-100">
+                        {g.items.map((it) => (
+                          <tr key={it.productId}>
+                            <td className="px-3 py-1.5 text-slate-700">{it.productName}</td>
+                            <td className="px-3 py-1.5">
+                              <span className={it.severity === "CRITICAL" ? "badge-red" : "badge-yellow"}>{it.severity}</span>
+                            </td>
+                            <td className="px-3 py-1.5 text-right text-xs text-slate-400">
+                              {it.currentStock}/{it.reorderLevel}
+                            </td>
+                            <td className="px-3 py-1.5 text-right font-semibold tabular-nums text-slate-900">+{it.suggestedQty}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : null}
+
+          <div className="form-actions">
+            <button type="button" onClick={() => setReorderOpen(false)} className="btn-secondary" disabled={reorderCreating}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={confirmReorder}
+              className="btn-primary"
+              disabled={reorderCreating || reorderLoading || !reorderPreview || reorderPreview.length === 0}
+            >
+              {reorderCreating ? "Generating…" : `Generate ${reorderPreview?.length ?? 0} draft PO(s)`}
+            </button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

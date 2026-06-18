@@ -207,10 +207,12 @@ export async function refreshDashboardStats(storeId: string): Promise<void> {
   let todayTransactions = 0;
   salesSnap.docs.forEach((d) => {
     const sale = d.data();
-    if (sale.status !== "COMPLETED") return;
+    // Voided and fully-refunded sales contribute nothing.
+    if (sale.status === "VOIDED" || sale.status === "REFUNDED") return;
     if (sale.pendingVoidRequestId) return;
     todayTransactions++;
-    todaySales += sale.total ?? 0;
+    const refunded = sale.refundedTotal ?? 0;
+    todaySales += (sale.total ?? 0) - refunded;
     sale.items?.forEach((item: { productId: string; quantity: number; lineTotal: number }) => {
       const product = productMap.get(item.productId);
       if (product?.supplierCost) {
@@ -219,6 +221,8 @@ export async function refreshDashboardStats(storeId: string): Promise<void> {
         todayProfit += item.lineTotal;
       }
     });
+    // Reduce profit by net refunds (approximate; ignores per-item cost recovery).
+    todayProfit -= refunded;
   });
 
   let lowStockCount = 0;

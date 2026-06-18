@@ -43,7 +43,7 @@ enum class DisposalReason(val label: String) {
 }
 
 enum class SaleStatus {
-    COMPLETED, VOIDED, REFUNDED;
+    COMPLETED, VOIDED, REFUNDED, PARTIALLY_REFUNDED;
 
     companion object {
         fun fromString(value: String): SaleStatus =

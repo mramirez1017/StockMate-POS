@@ -5,6 +5,7 @@ object PosCheckout {
 
     data class SaleEstimate(
         val pwdSeniorDiscountAmount: Double,
+        val appliedManualDiscount: Double,
         val total: Double,
         val afterPromo: Double,
     )
@@ -20,6 +21,7 @@ object PosCheckout {
         subtotal: Double,
         pwdOrSenior: Boolean,
         promoDiscount: Double = 0.0,
+        manualDiscount: Double = 0.0,
     ): SaleEstimate {
         val afterPromo = subtotal - promoDiscount
         val pwdSeniorDiscountAmount = if (pwdOrSenior) {
@@ -27,9 +29,12 @@ object PosCheckout {
         } else {
             0.0
         }
-        val total = roundMoney(afterPromo - pwdSeniorDiscountAmount)
+        val afterSenior = afterPromo - pwdSeniorDiscountAmount
+        val appliedManualDiscount = manualDiscount.coerceIn(0.0, afterSenior.coerceAtLeast(0.0))
+        val total = roundMoney(afterSenior - appliedManualDiscount)
         return SaleEstimate(
             pwdSeniorDiscountAmount = pwdSeniorDiscountAmount,
+            appliedManualDiscount = appliedManualDiscount,
             total = total,
             afterPromo = afterPromo,
         )

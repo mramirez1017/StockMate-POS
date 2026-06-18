@@ -1,6 +1,7 @@
-import { ReactNode, useMemo, useState } from "react";
+import { ReactNode, useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import TableScroll from "@/components/TableScroll";
+import Pagination from "@/components/Pagination";
 
 export interface Column<T> {
   key: string;
@@ -20,6 +21,8 @@ interface DataTableProps<T> {
   maxHeight?: string;
   defaultSortKey?: string;
   defaultSortDir?: "asc" | "desc";
+  /** Rows per page. Set to 0 to disable pagination (show all rows). Default 25. */
+  pageSize?: number;
 }
 
 function resolveSortValue<T>(row: T, col: Column<T>): string | number {
@@ -48,10 +51,12 @@ export default function DataTable<T>({
   maxHeight,
   defaultSortKey,
   defaultSortDir = "asc",
+  pageSize = 25,
 }: DataTableProps<T>) {
   const firstSortable = columns.find((c) => c.sortable !== false && c.header);
   const [sortKey, setSortKey] = useState(defaultSortKey ?? firstSortable?.key ?? "");
   const [sortDir, setSortDir] = useState<"asc" | "desc">(defaultSortDir);
+  const [page, setPage] = useState(1);
 
   const sortedData = useMemo(() => {
     const col = columns.find((c) => c.key === sortKey);
@@ -60,6 +65,23 @@ export default function DataTable<T>({
       compareSortValues(resolveSortValue(a, col), resolveSortValue(b, col), sortDir),
     );
   }, [columns, data, sortDir, sortKey]);
+
+  const paginate = pageSize > 0;
+  const pageCount = paginate ? Math.max(1, Math.ceil(sortedData.length / pageSize)) : 1;
+
+  // Keep the current page valid as data/filters/sorting change.
+  useEffect(() => {
+    setPage((p) => Math.min(p, pageCount));
+  }, [pageCount]);
+  useEffect(() => {
+    setPage(1);
+  }, [sortKey, sortDir]);
+
+  const pageData = useMemo(() => {
+    if (!paginate) return sortedData;
+    const start = (page - 1) * pageSize;
+    return sortedData.slice(start, start + pageSize);
+  }, [sortedData, paginate, page, pageSize]);
 
   const toggleSort = (col: Column<T>) => {
     if (col.sortable === false || !col.header) return;
@@ -94,7 +116,7 @@ export default function DataTable<T>({
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="divide-y divide-slate-100 md:hidden">
-        {sortedData.map((row) => (
+        {pageData.map((row) => (
           <div key={String(row[keyField])} className="px-4 py-3.5 active:bg-slate-50/80">
             {primaryColumn && (
               <div className="mb-2 font-medium text-slate-900">{primaryColumn.render(row)}</div>
@@ -145,7 +167,7 @@ export default function DataTable<T>({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
-              {sortedData.map((row) => (
+              {pageData.map((row) => (
                 <tr key={String(row[keyField])} className="transition-colors hover:bg-slate-50/80">
                   {columns.map((col) => (
                     <td key={col.key} className={`px-4 py-3.5 text-slate-700 ${col.className ?? ""}`}>
@@ -158,6 +180,16 @@ export default function DataTable<T>({
           </table>
         </TableScroll>
       </div>
+
+      {paginate && (
+        <Pagination
+          page={page}
+          pageCount={pageCount}
+          total={sortedData.length}
+          pageSize={pageSize}
+          onPageChange={setPage}
+        />
+      )}
     </div>
   );
 }

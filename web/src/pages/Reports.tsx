@@ -25,9 +25,24 @@ import { StatTile, InDemandTile, TopRankedTile } from "@/components/AnalyticsTil
 import { computeSalesAnalytics, type ProductCostInfo } from "@/lib/salesAnalytics";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { canViewProfit, canViewSupplierCost } from "@/lib/permissions";
-import { Search, Receipt, Package, Wallet, TrendingUp, PhilippinePeso, ChevronDown, Building2 } from "lucide-react";
+import { Search, Receipt, Package, Wallet, TrendingUp, PhilippinePeso, ChevronDown, Building2, Hourglass, Boxes } from "lucide-react";
 
-type ReportType = "sales" | "products" | "critical" | "delivery" | "disposal" | "profit" | "inventory" | "movements";
+type ReportType = "sales" | "products" | "critical" | "delivery" | "disposal" | "profit" | "inventory" | "movements" | "aging";
+
+interface AgingRow {
+  productId: string;
+  productName: string;
+  branchName: string;
+  stock: number;
+  lastSale: number | null;
+  daysIdle: number | null;
+  capitalValue: number;
+  retailValue: number;
+  bucket: "FRESH" | "SLOW" | "DEAD";
+}
+
+const SLOW_DAYS = 30;
+const DEAD_DAYS = 90;
 
 interface MovementRow {
   id: string;
@@ -53,6 +68,8 @@ const MOVEMENT_TYPES: { id: StockMovementType | "all"; label: string }[] = [
   { id: "ADJUSTMENT", label: "Adjustments" },
   { id: "DISPOSAL", label: "Disposals" },
   { id: "RETURN", label: "Returns" },
+  { id: "TRANSFER_OUT", label: "Transfers out" },
+  { id: "TRANSFER_IN", label: "Transfers in" },
 ];
 
 const TYPE_BADGE: Record<StockMovementType, string> = {
@@ -61,10 +78,14 @@ const TYPE_BADGE: Record<StockMovementType, string> = {
   ADJUSTMENT: "badge-purple",
   DISPOSAL: "badge-red",
   RETURN: "badge-yellow",
+  TRANSFER_IN: "badge-green",
+  TRANSFER_OUT: "badge-blue",
 };
 
 function typeLabel(t: StockMovementType): string {
   if (t === "DELIVERY_RECEIVED") return "Delivery";
+  if (t === "TRANSFER_IN") return "Transfer in";
+  if (t === "TRANSFER_OUT") return "Transfer out";
   return t.charAt(0) + t.slice(1).toLowerCase();
 }
 
@@ -92,6 +113,7 @@ export default function Reports() {
     { id: "products", label: "Product Sales" },
     { id: "critical", label: "Critical Stock" },
     { id: "disposal", label: "Disposal / Expired" },
+    { id: "aging", label: "Dead Stock & Aging" },
     { id: "inventory", label: "Inventory Value", adminOnly: true },
     { id: "profit", label: "Profit Report", adminOnly: true },
   ];
@@ -168,6 +190,7 @@ export default function Reports() {
 
           let capitalCost = 0;
           let totalProfit = 0;
+          let retailValue = 0;
           const inventoryLines: {
             productName: string;
             branchName: string;
@@ -184,6 +207,7 @@ export default function Reports() {
             const lineProfit = i.currentStock * (price - cost);
             capitalCost += lineCapital;
             totalProfit += lineProfit;
+            retailValue += i.currentStock * price;
             inventoryLines.push({
               productName: product?.name ?? i.productId,
               branchName: branchNames.get(i.branchId) ?? i.branchId,
@@ -195,8 +219,64 @@ export default function Reports() {
 
           result.capitalCost = capitalCost;
           result.totalProfit = totalProfit;
+          result.retailValue = retailValue;
           result.inventoryLines = inventoryLines;
         }
+      }
+      if (report === "aging") {
+        const [invSnap, productsSnap, branchesSnap, movSnap] = await Promise.all([
+          getDocs(scoped("branchInventory")),
+          getDocs(collection(db, "stores", storeId, "products")),
+          getDocs(collection(db, "stores", storeId, "branches")),
+          getDocs(scoped("stockMovements")),
+        ]);
+        const inv = invSnap.docs.map((d) => d.data() as BranchInventory);
+        const productMap = new Map(productsSnap.docs.map((d) => [d.id, { id: d.id, ...d.data() } as Product]));
+        const branchNames = new Map(branchesSnap.docs.map((d) => [d.id, (d.data() as Branch).name]));
+
+        // Latest SALE movement timestamp per branch+product.
+        const lastSaleMap = new Map<string, number>();
+        movSnap.docs.forEach((d) => {
+          const m = d.data() as StockMovement;
+          if (m.type !== "SALE") return;
+          const key = `${m.branchId}_${m.productId}`;
+          const prev = lastSaleMap.get(key) ?? 0;
+          if (m.createdAt > prev) lastSaleMap.set(key, m.createdAt);
+        });
+
+        const nowTs = Date.now();
+        const rows: AgingRow[] = inv
+          .filter((i) => i.currentStock > 0)
+          .map((i) => {
+            const product = productMap.get(i.productId);
+            const cost = product?.supplierCost ?? 0;
+            const price = product?.sellingPrice ?? 0;
+            const last = lastSaleMap.get(`${i.branchId}_${i.productId}`) ?? null;
+            const daysIdle = last ? Math.floor((nowTs - last) / 86400000) : null;
+            const idleForBucket = daysIdle ?? Infinity;
+            const bucket: AgingRow["bucket"] =
+              idleForBucket >= DEAD_DAYS ? "DEAD" : idleForBucket >= SLOW_DAYS ? "SLOW" : "FRESH";
+            return {
+              productId: i.productId,
+              productName: product?.name ?? i.productId,
+              branchName: branchNames.get(i.branchId) ?? i.branchId,
+              stock: i.currentStock,
+              lastSale: last,
+              daysIdle,
+              capitalValue: i.currentStock * cost,
+              retailValue: i.currentStock * price,
+              bucket,
+            };
+          })
+          .sort((a, b) => (b.daysIdle ?? Infinity) - (a.daysIdle ?? Infinity));
+
+        result.aging = rows;
+        result.agingSummary = {
+          deadCount: rows.filter((r) => r.bucket === "DEAD").length,
+          slowCount: rows.filter((r) => r.bucket === "SLOW").length,
+          deadCapital: rows.filter((r) => r.bucket === "DEAD").reduce((s, r) => s + r.capitalValue, 0),
+          deadRetail: rows.filter((r) => r.bucket === "DEAD").reduce((s, r) => s + r.retailValue, 0),
+        };
       }
       if (report === "disposal") {
         const snap = await getDocs(scoped("disposals"));
@@ -641,14 +721,21 @@ export default function Reports() {
           {report === "inventory" && (
             <div>
               <h3 className="text-lg font-semibold mb-4">Inventory Value</h3>
-              <div className="mb-6 grid gap-4 sm:grid-cols-2">
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-                  <p className="text-sm text-slate-500">Capital cost (supplier cost × stock)</p>
-                  <p className="text-2xl font-bold text-slate-900">{formatCurrency((data.capitalCost as number) ?? 0)}</p>
+              <div className="mb-6 grid gap-4 sm:grid-cols-3">
+                <div className="rounded-lg border border-violet-200 bg-violet-50 px-4 py-3">
+                  <p className="text-sm text-violet-700">Capital cost (COGS basis)</p>
+                  <p className="text-2xl font-bold text-violet-700">{formatCurrency((data.capitalCost as number) ?? 0)}</p>
+                  <p className="mt-0.5 text-xs text-violet-500">Supplier cost × stock on hand</p>
+                </div>
+                <div className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3">
+                  <p className="text-sm text-sky-700">Retail value</p>
+                  <p className="text-2xl font-bold text-sky-700">{formatCurrency((data.retailValue as number) ?? 0)}</p>
+                  <p className="mt-0.5 text-xs text-sky-500">Selling price × stock on hand</p>
                 </div>
                 <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
                   <p className="text-sm text-emerald-700">Potential profit on hand</p>
                   <p className="text-2xl font-bold text-emerald-700">{formatCurrency((data.totalProfit as number) ?? 0)}</p>
+                  <p className="mt-0.5 text-xs text-emerald-500">Retail − capital</p>
                 </div>
               </div>
               <TableScroll>
@@ -713,6 +800,70 @@ export default function Reports() {
               ))}
             </ul>
           )}
+          {report === "aging" && (() => {
+            const rows = (data.aging as AgingRow[]) ?? [];
+            const summary = (data.agingSummary as { deadCount: number; slowCount: number; deadCapital: number; deadRetail: number }) ?? {
+              deadCount: 0,
+              slowCount: 0,
+              deadCapital: 0,
+              deadRetail: 0,
+            };
+            return (
+              <div>
+                <div className="mb-4 flex flex-wrap items-center gap-2">
+                  <Hourglass size={18} className="text-violet-600" />
+                  <h3 className="text-lg font-semibold">Dead Stock & Aging</h3>
+                  <span className="text-xs text-slate-400">Slow ≥ {SLOW_DAYS}d · Dead ≥ {DEAD_DAYS}d since last sale</span>
+                </div>
+                <div className="stagger-children mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+                  <StatTile icon={Boxes} tint="bg-rose-100 text-rose-600" label="Dead items" value={String(summary.deadCount)} />
+                  <StatTile icon={Hourglass} tint="bg-amber-100 text-amber-600" label="Slow-moving items" value={String(summary.slowCount)} />
+                  {showCapital && (
+                    <StatTile icon={Wallet} tint="bg-violet-100 text-violet-600" label="Dead stock at cost" value={formatCurrency(summary.deadCapital)} />
+                  )}
+                  <StatTile icon={PhilippinePeso} tint="bg-sky-100 text-sky-600" label="Dead stock at retail" value={formatCurrency(summary.deadRetail)} />
+                </div>
+                <TableScroll maxHeight="max-h-[calc(100dvh-26rem)]">
+                  <table className="w-full min-w-[720px] text-sm">
+                    <thead className="sticky top-0 z-10 border-b bg-white">
+                      <tr>
+                        <th className="py-2 text-left">Product</th>
+                        <th className="py-2 text-left">Branch</th>
+                        <th className="py-2 text-left">Status</th>
+                        <th className="text-right">Stock</th>
+                        <th className="text-right">Days idle</th>
+                        <th className="text-left">Last sold</th>
+                        {showCapital && <th className="text-right">At cost</th>}
+                        <th className="text-right">At retail</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.length === 0 ? (
+                        <tr><td colSpan={showCapital ? 8 : 7} className="py-10 text-center text-slate-400">No stock on hand to analyze.</td></tr>
+                      ) : (
+                        rows.map((r) => (
+                          <tr key={`${r.branchName}_${r.productId}`} className="border-b border-slate-100">
+                            <td className="py-2 font-medium text-slate-900">{r.productName}</td>
+                            <td className="py-2 text-slate-600">{r.branchName}</td>
+                            <td className="py-2">
+                              <span className={r.bucket === "DEAD" ? "badge-red" : r.bucket === "SLOW" ? "badge-yellow" : "badge-green"}>
+                                {r.bucket === "DEAD" ? "Dead" : r.bucket === "SLOW" ? "Slow" : "Fresh"}
+                              </span>
+                            </td>
+                            <td className="text-right tabular-nums">{r.stock}</td>
+                            <td className="text-right tabular-nums text-slate-600">{r.daysIdle == null ? "Never sold" : `${r.daysIdle}d`}</td>
+                            <td className="py-2 text-slate-500">{r.lastSale ? formatDate(r.lastSale) : "—"}</td>
+                            {showCapital && <td className="text-right tabular-nums">{formatCurrency(r.capitalValue)}</td>}
+                            <td className="text-right tabular-nums">{formatCurrency(r.retailValue)}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </TableScroll>
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>

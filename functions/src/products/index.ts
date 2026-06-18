@@ -40,6 +40,8 @@ export const createProduct = onCall(async (request) => {
     unit: data.unit,
     unitSize: data.unitSize != null && data.unitSize > 0 ? data.unitSize : undefined,
     stockUnit,
+    unitsPerPack: data.unitsPerPack != null && data.unitsPerPack > 1 ? Math.floor(data.unitsPerPack) : undefined,
+    packLabel: data.unitsPerPack != null && data.unitsPerPack > 1 ? data.packLabel?.trim() || "box" : undefined,
     sellingPrice: data.sellingPrice,
     reorderLevel: data.reorderLevel ?? 10,
     criticalLevel: data.criticalLevel ?? 5,
@@ -104,10 +106,14 @@ export const updateProduct = onCall(async (request) => {
 
   const existing = snap.data() as Product;
 
+  const hasPack = updates.unitsPerPack != null && updates.unitsPerPack > 1;
   const patch = stripUndefined({
     ...updates,
     unitSize: updates.unitSize != null && updates.unitSize > 0 ? updates.unitSize : undefined,
     stockUnit: updates.stockUnit?.trim() || existing.stockUnit || existing.unit,
+    // Clear the pack fields explicitly when packaging is removed.
+    unitsPerPack: hasPack ? Math.floor(updates.unitsPerPack as number) : null,
+    packLabel: hasPack ? updates.packLabel?.trim() || "box" : null,
     supplierCost,
     updatedAt: now(),
   });

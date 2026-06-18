@@ -20,6 +20,7 @@ import { parseInteger, sanitizeIntegerInput } from "@/lib/integerInput";
 import {
   MEASURE_UNITS,
   defaultStockUnit,
+  formatPackNote,
   formatProductMeasure,
   isCountUnit,
   unitShort,
@@ -45,6 +46,8 @@ interface ProductForm {
   status: EntityStatus;
   branchId: string;
   initialStock: string;
+  unitsPerPack: string;
+  packLabel: string;
 }
 
 function emptyForm(defaultBranchId = ""): ProductForm {
@@ -63,6 +66,8 @@ function emptyForm(defaultBranchId = ""): ProductForm {
     status: "ACTIVE",
     branchId: defaultBranchId,
     initialStock: "",
+    unitsPerPack: "",
+    packLabel: "box",
   };
 }
 
@@ -196,13 +201,17 @@ export default function Products() {
 
   const openEdit = (p: Product) => {
     setEditing(p);
+    const packed = p.unitsPerPack != null && p.unitsPerPack > 1;
+    // Supplier cost is stored per piece; show it per pack when the product is packed.
+    const displayCost =
+      packed && p.supplierCost != null ? p.supplierCost * (p.unitsPerPack as number) : p.supplierCost;
     setForm({
       name: p.name,
       categoryId: p.categoryId,
       unit: p.unit,
       unitSize: p.unitSize != null && p.unitSize > 0 ? String(p.unitSize) : "",
       sellingPrice: formatOneDecimalForInput(p.sellingPrice),
-      supplierCost: formatOneDecimalForInput(p.supplierCost),
+      supplierCost: formatOneDecimalForInput(displayCost),
       reorderLevel: String(p.reorderLevel),
       criticalLevel: String(p.criticalLevel),
       barcode: p.barcode ?? "",
@@ -211,6 +220,8 @@ export default function Products() {
       status: p.status,
       branchId: p.primaryBranchId ?? "",
       initialStock: "",
+      unitsPerPack: packed ? String(p.unitsPerPack) : "",
+      packLabel: p.packLabel || "box",
     });
     setFormError(null);
     setModalOpen(true);
@@ -243,6 +254,23 @@ export default function Products() {
       return;
     }
 
+    // Optional pack (e.g. a box of 50). Stock stays in pieces; the pack only
+    // describes how it's purchased. Supplier cost is entered per pack and
+    // stored per piece (boxCost ÷ unitsPerPack).
+    let unitsPerPack: number | undefined;
+    if (form.unitsPerPack.trim()) {
+      const n = parseInteger(form.unitsPerPack, 0);
+      if (n <= 1) {
+        setFormError("Pieces per pack must be a whole number greater than 1 (e.g. 50).");
+        return;
+      }
+      unitsPerPack = n;
+    }
+    const supplierCostPerPiece =
+      supplierCostParsed != null && unitsPerPack
+        ? Math.round((supplierCostParsed / unitsPerPack) * 10000) / 10000
+        : supplierCostParsed ?? undefined;
+
     const stockUnit = defaultStockUnit(form.unit, form.unitSize);
     const initialStock = parseInitialStockInput(form.initialStock, stockUnit);
 
@@ -255,8 +283,10 @@ export default function Products() {
         unit: form.unit,
         unitSize: unitSizeParsed,
         stockUnit,
+        unitsPerPack,
+        packLabel: unitsPerPack ? form.packLabel.trim() || "box" : undefined,
         sellingPrice,
-        supplierCost: supplierCostParsed ?? undefined,
+        supplierCost: supplierCostPerPiece,
         reorderLevel: parseInteger(form.reorderLevel, 10),
         criticalLevel: parseInteger(form.criticalLevel, 5),
         barcode: form.barcode.trim() || undefined,
@@ -444,11 +474,15 @@ export default function Products() {
                       return <span className="font-medium text-slate-400">0</span>;
                     }
                     const s = stockStatus(inv.currentStock, inv.reorderLevel, inv.criticalLevel);
+                    const packNote = formatPackNote(p, qty);
                     return (
-                      <span className="inline-flex items-center gap-2">
-                        <span className="font-medium tabular-nums">{qty}</span>
-                        <span className={statusBadgeClass(s.badge)}>{s.label}</span>
-                      </span>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="inline-flex items-center gap-2">
+                          <span className="font-medium tabular-nums">{qty} pcs</span>
+                          <span className={statusBadgeClass(s.badge)}>{s.label}</span>
+                        </span>
+                        {packNote && <span className="text-[11px] text-slate-400">{packNote}</span>}
+                      </div>
                     );
                   },
                 },
@@ -466,7 +500,20 @@ export default function Products() {
                   key: "cost",
                   header: "Supplier Cost",
                   sortValue: (p: Product) => p.supplierCost ?? 0,
-                  render: (p: Product) => (p.supplierCost != null ? formatCurrency(p.supplierCost) : "-"),
+                  render: (p: Product) => {
+                    if (p.supplierCost == null) return "-";
+                    const packed = p.unitsPerPack != null && p.unitsPerPack > 1;
+                    return (
+                      <div className="flex flex-col gap-0.5">
+                        <span className="tabular-nums">{formatCurrency(p.supplierCost)}/pc</span>
+                        {packed && (
+                          <span className="text-[11px] text-slate-400">
+                            {formatCurrency(p.supplierCost * (p.unitsPerPack as number))}/{p.packLabel || "box"}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  },
                 },
               ]
             : []),
@@ -610,6 +657,37 @@ export default function Products() {
               </p>
             </div>
 
+            <div>
+              <label className="mb-1 block text-sm font-medium">Pieces per pack</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                className="input-field"
+                value={form.unitsPerPack}
+                placeholder="e.g. 50 (leave empty if sold loose)"
+                onChange={(e) => setForm({ ...form, unitsPerPack: sanitizeIntegerInput(e.target.value) })}
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                {form.unitsPerPack && parseInt(form.unitsPerPack, 10) > 1
+                  ? `Bought in ${form.packLabel || "box"}es of ${form.unitsPerPack} — stock is still counted in pieces.`
+                  : "Set this if the supplier delivers in boxes/packs (e.g. 50 tablets per box)."}
+              </p>
+            </div>
+
+            {form.unitsPerPack && parseInt(form.unitsPerPack, 10) > 1 && (
+              <div>
+                <label className="mb-1 block text-sm font-medium">Pack label</label>
+                <input
+                  type="text"
+                  className="input-field"
+                  value={form.packLabel}
+                  placeholder="box"
+                  onChange={(e) => setForm({ ...form, packLabel: e.target.value })}
+                />
+                <p className="mt-1 text-xs text-slate-500">What one pack is called, e.g. box, case, pack.</p>
+              </div>
+            )}
+
             {!editing && (
               <div>
                 <label className="mb-1 block text-sm font-medium">Stock</label>
@@ -628,7 +706,15 @@ export default function Products() {
                   placeholder="0"
                 />
                 <p className="mt-1 text-xs text-slate-500">
-                  Starting quantity at the selected branch. Other branches start at 0.
+                  Starting quantity in pieces at the selected branch. Other branches start at 0.
+                  {form.unitsPerPack &&
+                    parseInt(form.unitsPerPack, 10) > 1 &&
+                    form.initialStock &&
+                    parseInt(form.initialStock, 10) > 0 &&
+                    ` (${formatPackNote(
+                      { unitsPerPack: parseInt(form.unitsPerPack, 10), packLabel: form.packLabel },
+                      parseInt(form.initialStock, 10),
+                    )})`}
                 </p>
               </div>
             )}
@@ -649,7 +735,11 @@ export default function Products() {
 
             {showCost && (
               <div>
-                <label className="mb-1 block text-sm font-medium">Supplier Cost</label>
+                <label className="mb-1 block text-sm font-medium">
+                  {form.unitsPerPack && parseInt(form.unitsPerPack, 10) > 1
+                    ? `Supplier Cost (per ${form.packLabel || "box"})`
+                    : "Supplier Cost"}
+                </label>
                 <input
                   type="text"
                   inputMode="decimal"
@@ -658,7 +748,14 @@ export default function Products() {
                   placeholder="0.0"
                   onChange={(e) => setForm({ ...form, supplierCost: sanitizeOneDecimalInput(e.target.value) })}
                 />
-                <p className="mt-1 text-xs text-slate-500">One decimal place only (e.g. 45.0)</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {form.unitsPerPack &&
+                  parseInt(form.unitsPerPack, 10) > 1 &&
+                  form.supplierCost &&
+                  parseFloat(form.supplierCost) > 0
+                    ? `≈ ${formatCurrency(parseFloat(form.supplierCost) / parseInt(form.unitsPerPack, 10))} per piece`
+                    : "One decimal place only (e.g. 45.0)"}
+                </p>
               </div>
             )}
 

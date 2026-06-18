@@ -278,6 +278,9 @@ class FirebaseRepository {
         paymentReference: String? = null,
         customerEmail: String? = null,
         customerPhone: String? = null,
+        manualDiscount: Double? = null,
+        manualDiscountReason: String? = null,
+        payments: List<SalePayment> = emptyList(),
     ): CreateSaleResult {
         val data = hashMapOf<String, Any?>(
             "branchId" to branchId,
@@ -289,8 +292,163 @@ class FirebaseRepository {
         paymentReference?.let { data["paymentReference"] = it }
         customerEmail?.let { data["customerEmail"] = it }
         customerPhone?.let { data["customerPhone"] = it }
+        if (manualDiscount != null && manualDiscount > 0) {
+            data["manualDiscount"] = manualDiscount
+            if (!manualDiscountReason.isNullOrBlank()) data["manualDiscountReason"] = manualDiscountReason.trim()
+        }
+        if (payments.isNotEmpty()) {
+            data["payments"] = payments.map { p ->
+                val m = hashMapOf<String, Any?>("method" to p.method, "amount" to p.amount)
+                if (!p.reference.isNullOrBlank()) m["reference"] = p.reference
+                m
+            }
+        }
         val result = functions.getHttpsCallable("createSale").call(data).await()
         return parseCreateSaleResult(result.data)
+    }
+
+    // ── Parked / held sales ────────────────────────────────────────────────────
+
+    fun observeParkedSales(storeId: String, branchId: String): Flow<List<ParkedSale>> = callbackFlow {
+        val reg = db.collection("stores").document(storeId).collection("parkedSales")
+            .whereEqualTo("branchId", branchId)
+            .addSnapshotListener { snap, _ ->
+                val list = snap?.documents
+                    ?.mapNotNull { parseParkedSale(it.id, it.data ?: return@mapNotNull null) }
+                    ?.sortedByDescending { it.createdAt }
+                    ?: emptyList()
+                trySend(list)
+            }
+        awaitClose { reg.remove() }
+    }
+
+    suspend fun parkSale(
+        branchId: String,
+        items: List<CartItemInput>,
+        label: String?,
+    ): Result<String> = runCatching {
+        val data = hashMapOf<String, Any?>(
+            "branchId" to branchId,
+            "items" to items.map { mapOf("productId" to it.productId, "quantity" to it.quantity) },
+        )
+        if (!label.isNullOrBlank()) data["label"] = label.trim()
+        val result = functions.getHttpsCallable("parkSale").call(data).await()
+        (result.data as? Map<*, *>)?.get("parkedSaleId") as? String ?: ""
+    }
+
+    suspend fun deleteParkedSale(parkedSaleId: String): Result<Unit> = runCatching {
+        functions.getHttpsCallable("deleteParkedSale")
+            .call(mapOf("parkedSaleId" to parkedSaleId)).await()
+        Unit
+    }
+
+    private fun parseParkedSale(id: String, data: Map<String, Any?>): ParkedSale {
+        val rawItems = data["items"] as? List<*> ?: emptyList<Any?>()
+        val items = rawItems.mapNotNull { entry ->
+            val m = entry as? Map<*, *> ?: return@mapNotNull null
+            ParkedSaleItem(
+                productId = m["productId"] as? String ?: "",
+                productName = m["productName"] as? String ?: "",
+                quantity = (m["quantity"] as? Number)?.toInt() ?: 0,
+                unitPrice = (m["unitPrice"] as? Number)?.toDouble() ?: 0.0,
+            )
+        }
+        return ParkedSale(
+            id = id,
+            branchId = data["branchId"] as? String ?: "",
+            label = data["label"] as? String ?: "",
+            items = items,
+            note = data["note"] as? String,
+            customerName = data["customerName"] as? String,
+            itemCount = (data["itemCount"] as? Number)?.toInt() ?: items.size,
+            estimatedTotal = (data["estimatedTotal"] as? Number)?.toDouble() ?: 0.0,
+            parkedBy = data["parkedBy"] as? String ?: "",
+            parkedByName = data["parkedByName"] as? String ?: "",
+            createdAt = (data["createdAt"] as? Number)?.toLong() ?: 0L,
+        )
+    }
+
+    // ── Stock counts (physical stock-take) ─────────────────────────────────────
+
+    fun observeStockCounts(storeId: String): Flow<List<StockCount>> = callbackFlow {
+        val reg = db.collection("stores").document(storeId).collection("stockCounts")
+            .orderBy("createdAt", Query.Direction.DESCENDING)
+            .limit(100)
+            .addSnapshotListener { snap, _ ->
+                val list = snap?.documents
+                    ?.mapNotNull { parseStockCount(it.id, it.data ?: return@mapNotNull null) }
+                    ?: emptyList()
+                trySend(list)
+            }
+        awaitClose { reg.remove() }
+    }
+
+    suspend fun createStockCount(
+        branchId: String,
+        scope: String,
+        productIds: List<String>?,
+        notes: String?,
+    ): Result<String> = runCatching {
+        val data = hashMapOf<String, Any?>("branchId" to branchId, "scope" to scope)
+        if (scope == "PARTIAL" && productIds != null) data["productIds"] = productIds
+        if (!notes.isNullOrBlank()) data["notes"] = notes.trim()
+        val result = functions.getHttpsCallable("createStockCount").call(data).await()
+        (result.data as? Map<*, *>)?.get("countId") as? String ?: ""
+    }
+
+    suspend fun submitStockCount(
+        countId: String,
+        counts: List<Pair<String, Int>>,
+    ): Result<Unit> = runCatching {
+        val data = hashMapOf<String, Any?>(
+            "countId" to countId,
+            "counts" to counts.map { mapOf("productId" to it.first, "countedQty" to it.second) },
+        )
+        functions.getHttpsCallable("submitStockCount").call(data).await()
+        Unit
+    }
+
+    suspend fun cancelStockCount(countId: String, reason: String?): Result<Unit> = runCatching {
+        val data = hashMapOf<String, Any?>("countId" to countId)
+        if (!reason.isNullOrBlank()) data["reason"] = reason.trim()
+        functions.getHttpsCallable("cancelStockCount").call(data).await()
+        Unit
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun parseStockCount(id: String, data: Map<String, Any?>): StockCount {
+        val rawItems = data["items"] as? List<*> ?: emptyList<Any?>()
+        val items = rawItems.mapNotNull { entry ->
+            val m = entry as? Map<*, *> ?: return@mapNotNull null
+            StockCountItem(
+                productId = m["productId"] as? String ?: "",
+                productName = m["productName"] as? String ?: "",
+                expectedQty = (m["expectedQty"] as? Number)?.toInt() ?: 0,
+                countedQty = (m["countedQty"] as? Number)?.toInt(),
+                variance = (m["variance"] as? Number)?.toInt(),
+            )
+        }
+        return StockCount(
+            id = id,
+            branchId = data["branchId"] as? String ?: "",
+            countNumber = data["countNumber"] as? String ?: "",
+            scope = data["scope"] as? String ?: "FULL",
+            status = data["status"] as? String ?: "IN_PROGRESS",
+            items = items,
+            notes = data["notes"] as? String,
+            totalVarianceUnits = (data["totalVarianceUnits"] as? Number)?.toInt(),
+            countedItems = (data["countedItems"] as? Number)?.toInt(),
+            varianceItems = (data["varianceItems"] as? Number)?.toInt(),
+            startedBy = data["startedBy"] as? String ?: "",
+            startedByName = data["startedByName"] as? String ?: "",
+            startedAt = (data["startedAt"] as? Number)?.toLong() ?: 0L,
+            completedByName = data["completedByName"] as? String,
+            completedAt = (data["completedAt"] as? Number)?.toLong(),
+            cancelledByName = data["cancelledByName"] as? String,
+            cancelledAt = (data["cancelledAt"] as? Number)?.toLong(),
+            cancelReason = data["cancelReason"] as? String,
+            createdAt = (data["createdAt"] as? Number)?.toLong() ?: 0L,
+        )
     }
 
     suspend fun receiveDelivery(
@@ -347,6 +505,173 @@ class FirebaseRepository {
         val result = functions.getHttpsCallable("createPurchaseRequest").call(data).await()
         val map = result.data as? Map<*, *> ?: error("Invalid response")
         return CreatePurchaseRequestResult(purchaseRequestId = map["purchaseRequestId"] as? String ?: "")
+    }
+
+    // ── Permission (access) requests ──────────────────────────────────────────
+
+    fun observePermissionRequests(storeId: String): Flow<List<PermissionRequest>> = callbackFlow {
+        val reg = db.collection("stores").document(storeId).collection("permissionRequests")
+            .orderBy("createdAt", Query.Direction.DESCENDING)
+            .limit(100)
+            .addSnapshotListener { snap, _ ->
+                val list = snap?.documents
+                    ?.mapNotNull { parsePermissionRequest(it.id, it.data ?: return@mapNotNull null) }
+                    ?: emptyList()
+                trySend(list)
+            }
+        awaitClose { reg.remove() }
+    }
+
+    suspend fun createPermissionRequest(permission: String, reason: String?): Result<String> = runCatching {
+        val data = hashMapOf<String, Any?>("permission" to permission)
+        if (!reason.isNullOrBlank()) data["reason"] = reason.trim()
+        val result = functions.getHttpsCallable("createPermissionRequest").call(data).await()
+        (result.data as? Map<*, *>)?.get("permissionRequestId") as? String ?: ""
+    }
+
+    suspend fun approvePermissionRequest(requestId: String): Result<Unit> = runCatching {
+        functions.getHttpsCallable("approvePermissionRequest")
+            .call(mapOf("requestId" to requestId)).await()
+        Unit
+    }
+
+    suspend fun rejectPermissionRequest(requestId: String): Result<Unit> = runCatching {
+        functions.getHttpsCallable("rejectPermissionRequest")
+            .call(mapOf("requestId" to requestId)).await()
+        Unit
+    }
+
+    private fun parsePermissionRequest(id: String, data: Map<String, Any?>): PermissionRequest =
+        PermissionRequest(
+            id = id,
+            permission = data["permission"] as? String ?: "",
+            reason = data["reason"] as? String,
+            status = data["status"] as? String ?: "PENDING",
+            requestedBy = data["requestedBy"] as? String ?: "",
+            requestedByName = data["requestedByName"] as? String ?: "",
+            branchId = data["branchId"] as? String,
+            createdAt = (data["createdAt"] as? Number)?.toLong() ?: 0L,
+        )
+
+    // ── Stock transfers (branch ↔ branch) ─────────────────────────────────────
+
+    fun observeStockTransfers(storeId: String): Flow<List<StockTransfer>> = callbackFlow {
+        val reg = db.collection("stores").document(storeId).collection("stockTransfers")
+            .orderBy("createdAt", Query.Direction.DESCENDING)
+            .limit(100)
+            .addSnapshotListener { snap, _ ->
+                val list = snap?.documents
+                    ?.mapNotNull { parseStockTransfer(it.id, it.data ?: return@mapNotNull null) }
+                    ?: emptyList()
+                trySend(list)
+            }
+        awaitClose { reg.remove() }
+    }
+
+    suspend fun loadBranchOptions(storeId: String): List<BranchOption> {
+        val snap = db.collection("stores").document(storeId).collection("branches")
+            .whereEqualTo("status", "ACTIVE")
+            .get().await()
+        return snap.documents.mapNotNull { doc ->
+            val name = doc.getString("name") ?: return@mapNotNull null
+            BranchOption(id = doc.id, name = name)
+        }.sortedBy { it.name }
+    }
+
+    suspend fun createStockTransfer(
+        fromBranchId: String,
+        toBranchId: String,
+        items: List<Pair<String, Int>>,
+        notes: String?,
+    ): Result<String> = runCatching {
+        val data = hashMapOf<String, Any?>(
+            "fromBranchId" to fromBranchId,
+            "toBranchId" to toBranchId,
+            "items" to items.map { mapOf("productId" to it.first, "quantity" to it.second) },
+        )
+        if (!notes.isNullOrBlank()) data["notes"] = notes.trim()
+        val result = functions.getHttpsCallable("createStockTransfer").call(data).await()
+        (result.data as? Map<*, *>)?.get("transferId") as? String ?: ""
+    }
+
+    suspend fun approveStockTransfer(transferId: String): Result<Unit> = runCatching {
+        functions.getHttpsCallable("approveStockTransfer")
+            .call(mapOf("transferId" to transferId)).await()
+        Unit
+    }
+
+    suspend fun rejectStockTransfer(transferId: String, reason: String?): Result<Unit> = runCatching {
+        val data = hashMapOf<String, Any?>("transferId" to transferId)
+        if (!reason.isNullOrBlank()) data["reason"] = reason.trim()
+        functions.getHttpsCallable("rejectStockTransfer").call(data).await()
+        Unit
+    }
+
+    suspend fun receiveStockTransfer(transferId: String): Result<Unit> = runCatching {
+        functions.getHttpsCallable("receiveStockTransfer")
+            .call(mapOf("transferId" to transferId)).await()
+        Unit
+    }
+
+    suspend fun cancelStockTransfer(transferId: String, reason: String?): Result<Unit> = runCatching {
+        val data = hashMapOf<String, Any?>("transferId" to transferId)
+        if (!reason.isNullOrBlank()) data["reason"] = reason.trim()
+        functions.getHttpsCallable("cancelStockTransfer").call(data).await()
+        Unit
+    }
+
+    // ── Returns / refunds ─────────────────────────────────────────────────────
+
+    /** Process a (partial) return against a completed sale. items = (productId, quantity, restock). */
+    suspend fun createSaleReturn(
+        saleId: String,
+        items: List<Triple<String, Int, Boolean>>,
+        reason: String?,
+        refundMethod: String?,
+    ): Result<Double> = runCatching {
+        val data = hashMapOf<String, Any?>(
+            "saleId" to saleId,
+            "items" to items.map {
+                mapOf("productId" to it.first, "quantity" to it.second, "restock" to it.third)
+            },
+        )
+        if (!reason.isNullOrBlank()) data["reason"] = reason.trim()
+        if (!refundMethod.isNullOrBlank()) data["refundMethod"] = refundMethod
+        val result = functions.getHttpsCallable("createSaleReturn").call(data).await()
+        ((result.data as? Map<*, *>)?.get("refundTotal") as? Number)?.toDouble() ?: 0.0
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun parseStockTransfer(id: String, data: Map<String, Any?>): StockTransfer {
+        val rawItems = data["items"] as? List<*> ?: emptyList<Any?>()
+        val items = rawItems.mapNotNull { entry ->
+            val m = entry as? Map<*, *> ?: return@mapNotNull null
+            StockTransferItem(
+                productId = m["productId"] as? String ?: "",
+                productName = m["productName"] as? String ?: "",
+                quantity = (m["quantity"] as? Number)?.toInt() ?: 0,
+                receivedQty = (m["receivedQty"] as? Number)?.toInt(),
+            )
+        }
+        return StockTransfer(
+            id = id,
+            transferNumber = data["transferNumber"] as? String ?: "",
+            fromBranchId = data["fromBranchId"] as? String ?: "",
+            toBranchId = data["toBranchId"] as? String ?: "",
+            status = data["status"] as? String ?: "PENDING_APPROVAL",
+            items = items,
+            notes = data["notes"] as? String,
+            requestedBy = data["requestedBy"] as? String ?: "",
+            requestedByName = data["requestedByName"] as? String ?: "",
+            approvedByName = data["approvedByName"] as? String,
+            dispatchedByName = data["dispatchedByName"] as? String,
+            receivedByName = data["receivedByName"] as? String,
+            rejectedByName = data["rejectedByName"] as? String,
+            rejectReason = data["rejectReason"] as? String,
+            cancelledByName = data["cancelledByName"] as? String,
+            cancelReason = data["cancelReason"] as? String,
+            createdAt = (data["createdAt"] as? Number)?.toLong() ?: 0L,
+        )
     }
 
     // ── Messaging ───────────────────────────────────────────────────────────
@@ -533,6 +858,8 @@ class FirebaseRepository {
         supplierCost = (data["supplierCost"] as? Number)?.toDouble(),
         imageUrl = data["imageUrl"] as? String,
         remarks = data["remarks"] as? String,
+        unitsPerPack = (data["unitsPerPack"] as? Number)?.toInt(),
+        packLabel = data["packLabel"] as? String,
         createdAt = (data["createdAt"] as? Number)?.toLong() ?: 0L,
         updatedAt = (data["updatedAt"] as? Number)?.toLong() ?: 0L,
     )
@@ -589,10 +916,20 @@ class FirebaseRepository {
             },
             subtotal = (data["subtotal"] as? Number)?.toDouble() ?: 0.0,
             discount = (data["discount"] as? Number)?.toDouble() ?: 0.0,
+            manualDiscount = (data["manualDiscount"] as? Number)?.toDouble() ?: 0.0,
+            manualDiscountReason = data["manualDiscountReason"] as? String,
             pwdSeniorDiscountAmount = (data["pwdSeniorDiscountAmount"] as? Number)?.toDouble() ?: 0.0,
             tax = (data["tax"] as? Number)?.toDouble() ?: 0.0,
             total = (data["total"] as? Number)?.toDouble() ?: 0.0,
             paymentMethod = data["paymentMethod"] as? String ?: "CASH",
+            payments = (data["payments"] as? List<*>)?.mapNotNull { entry ->
+                val m = entry as? Map<*, *> ?: return@mapNotNull null
+                SalePayment(
+                    method = m["method"] as? String ?: "CASH",
+                    amount = (m["amount"] as? Number)?.toDouble() ?: 0.0,
+                    reference = m["reference"] as? String,
+                )
+            } ?: emptyList(),
             paymentReference = data["paymentReference"] as? String,
             amountTendered = (data["amountTendered"] as? Number)?.toDouble(),
             changeGiven = (data["changeGiven"] as? Number)?.toDouble(),

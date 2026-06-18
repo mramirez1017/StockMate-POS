@@ -87,17 +87,6 @@ function LoginForm({
         </div>
       )}
 
-      {compact && (
-        <div className="mb-6 flex flex-col items-center gap-3">
-          <img
-            src="/sidebar-icon.png"
-            alt="StockMate"
-            className="h-16 w-16 rounded-2xl shadow-glow"
-          />
-          <span className="text-lg font-bold tracking-tight text-white drop-shadow-md">StockMate POS</span>
-        </div>
-      )}
-
       {displayError && (
         <div className="mb-4 rounded-lg border border-red-300/40 bg-red-50/90 px-4 py-3 text-sm text-red-700 backdrop-blur-sm">
           {displayError}
@@ -188,7 +177,7 @@ export default function Login() {
       {/* Branded login screen — mobile full bleed, desktop left pane */}
       <div
         className="pointer-events-none absolute inset-0 bg-cover bg-top bg-no-repeat md:hidden"
-        style={{ backgroundImage: "url(/login-bg.png)" }}
+        style={{ backgroundImage: "url(/login-bg-mobile.png)" }}
         aria-hidden
       />
 

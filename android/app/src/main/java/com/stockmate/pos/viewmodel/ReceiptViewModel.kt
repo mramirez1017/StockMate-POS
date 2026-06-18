@@ -16,6 +16,9 @@ data class ReceiptUiState(
     val recentSales: List<Sale> = emptyList(),
     val isLoading: Boolean = false,
     val error: String? = null,
+    val returnSubmitting: Boolean = false,
+    val returnNotice: String? = null,
+    val returnError: String? = null,
 )
 
 class ReceiptViewModel(
@@ -53,5 +56,34 @@ class ReceiptViewModel(
                 _uiState.update { it.copy(isLoading = false, error = e.message) }
             }
         }
+    }
+
+    /** Process a (partial) return; items = (productId, quantity, restock). Reloads the sale on success. */
+    fun processReturn(
+        user: User,
+        saleId: String,
+        items: List<Triple<String, Int, Boolean>>,
+        reason: String?,
+        refundMethod: String?,
+    ) {
+        if (_uiState.value.returnSubmitting || items.isEmpty()) return
+        _uiState.update { it.copy(returnSubmitting = true, returnError = null, returnNotice = null) }
+        viewModelScope.launch {
+            repository.createSaleReturn(saleId, items, reason, refundMethod)
+                .onSuccess { refund ->
+                    _uiState.update {
+                        it.copy(returnSubmitting = false, returnNotice = "Refunded ₱%.2f".format(refund))
+                    }
+                    runCatching { repository.getSale(user.storeId, saleId) }
+                        .onSuccess { sale -> _uiState.update { it.copy(sale = sale) } }
+                }
+                .onFailure { e ->
+                    _uiState.update { it.copy(returnSubmitting = false, returnError = e.message ?: "Return failed") }
+                }
+        }
+    }
+
+    fun consumeReturnMessages() {
+        _uiState.update { it.copy(returnError = null, returnNotice = null) }
     }
 }

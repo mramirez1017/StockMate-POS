@@ -12,6 +12,7 @@ import {
   Search,
   BarChart3,
   Wallet,
+  ArrowRight,
 } from "lucide-react";
 import {
   LineChart,
@@ -32,6 +33,7 @@ import {
   Product,
   Category,
   PurchaseOrder,
+  StockTransfer,
   Disposal,
   DisposalReason,
 } from "@stockmate/types";
@@ -42,7 +44,8 @@ import Modal from "@/components/Modal";
 import TableScroll from "@/components/TableScroll";
 import { formatCurrency, formatDate, statusBadgeClass } from "@/lib/format";
 import { canViewProfit, canViewSupplierCost, isManagerOrAbove } from "@/lib/permissions";
-import { branchScopedQuery } from "@/lib/branchScope";
+import { branchScopedQuery, isStoreWideAccess } from "@/lib/branchScope";
+import { branchName, useBranches } from "@/lib/useBranches";
 import DateRangeBar, { EMPTY_RANGE, isWithinRange, rangeLabel, type DateRange } from "@/components/DateRangeBar";
 import { StatTile, InDemandTile, TopRankedTile } from "@/components/AnalyticsTiles";
 import { computeSalesAnalytics, type ProductCostInfo } from "@/lib/salesAnalytics";
@@ -82,6 +85,8 @@ const DISPOSAL_COLORS: Record<string, string> = {
 
 export default function Dashboard() {
   const { storeId, user } = useAuth();
+  const { branches } = useBranches(storeId);
+  const [incomingTransfers, setIncomingTransfers] = useState<StockTransfer[]>([]);
   const [todaySales, setTodaySales] = useState<Sale[]>([]);
   const [weekSales, setWeekSales] = useState<Sale[]>([]);
   const [inventory, setInventory] = useState<BranchInventory[]>([]);
@@ -136,6 +141,14 @@ export default function Dashboard() {
         ),
         (snap) => setPendingPOs(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as PurchaseOrder))
       ),
+      onSnapshot(collection(db, "stores", storeId, "stockTransfers"), (snap) => {
+        const wide = isStoreWideAccess(user);
+        setIncomingTransfers(
+          snap.docs
+            .map((d) => ({ id: d.id, ...d.data() }) as StockTransfer)
+            .filter((t) => t.status === "IN_TRANSIT" && (wide || t.toBranchId === user.branchId)),
+        );
+      }),
       onSnapshot(
         branchScopedQuery(collection(db, "stores", storeId, "disposals"), user),
         (snap) => setDisposals(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Disposal)),
@@ -569,7 +582,7 @@ export default function Dashboard() {
             <h2 className="section-heading">Upcoming Deliveries</h2>
             <Link to="/deliveries" className="text-xs font-semibold text-brand-600">View all</Link>
           </div>
-          {pendingPOs.length === 0 ? (
+          {pendingPOs.length === 0 && incomingTransfers.length === 0 ? (
             <p className="py-8 text-center text-sm text-slate-500">No pending deliveries</p>
           ) : (
             <ul className="max-h-56 space-y-3 overflow-y-auto">
@@ -587,6 +600,24 @@ export default function Dashboard() {
                   </li>
                 );
               })}
+              {incomingTransfers.slice(0, 5).map((t) => (
+                <li key={t.id} className="rounded-lg border border-slate-100 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-slate-900">{t.transferNumber}</p>
+                    <Link to="/transfers" className="text-[11px] font-semibold text-brand-600">
+                      Receive
+                    </Link>
+                  </div>
+                  <p className="flex items-center gap-1 text-xs text-slate-500">
+                    {branchName(branches, t.fromBranchId)}
+                    <ArrowRight size={11} className="text-slate-400" />
+                    {branchName(branches, t.toBranchId)}
+                  </p>
+                  <span className="mt-2 inline-block rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-700">
+                    Transfer in transit
+                  </span>
+                </li>
+              ))}
             </ul>
           )}
         </div>

@@ -58,8 +58,15 @@ fun StockMateNavHost(
                 onOpen = { notification ->
                     val type = notification.refType
                     val id = notification.refId
-                    if ((type == "PURCHASE_ORDER" || type == "DELIVERY") && !id.isNullOrBlank()) {
-                        navController.navigate(NavRoutes.deliveryChecklist(id))
+                    when {
+                        (type == "PURCHASE_ORDER" || type == "DELIVERY") && !id.isNullOrBlank() ->
+                            navController.navigate(NavRoutes.deliveryChecklist(id))
+                        type == "PERMISSION_REQUEST" ->
+                            navController.navigate(NavRoutes.ACCESS_REQUESTS)
+                        type == "STOCK_TRANSFER" ->
+                            navController.navigate(NavRoutes.STOCK_TRANSFERS)
+                        type == "STOCK_COUNT" ->
+                            navController.navigate(NavRoutes.STOCK_COUNTS)
                     }
                 },
                 onBack = { navController.popBackStack() },
@@ -182,6 +189,9 @@ fun StockMateNavHost(
 
         composable(NavRoutes.RECEIPT) {
             val state by receiptViewModel.uiState.collectAsState()
+            val canReturn = user.role == com.stockmate.pos.data.models.UserRole.ADMIN ||
+                user.role == com.stockmate.pos.data.models.UserRole.OWNER ||
+                user.role == com.stockmate.pos.data.models.UserRole.STORE_MANAGER
             ReceiptScreen(
                 sale = state.sale,
                 currency = "PHP",
@@ -199,6 +209,14 @@ fun StockMateNavHost(
                 recentSales = state.recentSales,
                 isLoading = state.isLoading,
                 onBack = { navController.popBackStack() },
+                canReturn = canReturn,
+                returnSubmitting = state.returnSubmitting,
+                returnNotice = state.returnNotice,
+                returnError = state.returnError,
+                onReturn = { items, reason, method ->
+                    state.sale?.let { receiptViewModel.processReturn(user, it.id, items, reason, method) }
+                },
+                onConsumeReturnMessages = { receiptViewModel.consumeReturnMessages() },
             )
         }
 
@@ -208,6 +226,9 @@ fun StockMateNavHost(
         ) { backStackEntry ->
             val saleId = backStackEntry.arguments?.getString("saleId") ?: return@composable
             val state by receiptViewModel.uiState.collectAsState()
+            val canReturn = user.role == com.stockmate.pos.data.models.UserRole.ADMIN ||
+                user.role == com.stockmate.pos.data.models.UserRole.OWNER ||
+                user.role == com.stockmate.pos.data.models.UserRole.STORE_MANAGER
             ReceiptScreen(
                 sale = state.sale,
                 currency = "PHP",
@@ -223,11 +244,46 @@ fun StockMateNavHost(
                 recentSales = emptyList(),
                 isLoading = state.isLoading,
                 onBack = { navController.popBackStack() },
+                canReturn = canReturn,
+                returnSubmitting = state.returnSubmitting,
+                returnNotice = state.returnNotice,
+                returnError = state.returnError,
+                onReturn = { items, reason, method ->
+                    receiptViewModel.processReturn(user, saleId, items, reason, method)
+                },
+                onConsumeReturnMessages = { receiptViewModel.consumeReturnMessages() },
             )
         }
 
         composable(NavRoutes.BLUETOOTH_PRINTER) {
             BluetoothPrinterScreen(
+                onBack = { navController.popBackStack() },
+            )
+        }
+
+        composable(NavRoutes.ACCESS_REQUESTS) {
+            val accessViewModel: AccessRequestsViewModel = viewModel()
+            AccessRequestsScreen(
+                user = user,
+                viewModel = accessViewModel,
+                onBack = { navController.popBackStack() },
+            )
+        }
+
+        composable(NavRoutes.STOCK_TRANSFERS) {
+            val transfersViewModel: StockTransfersViewModel = viewModel()
+            StockTransfersScreen(
+                user = user,
+                viewModel = transfersViewModel,
+                onBack = { navController.popBackStack() },
+            )
+        }
+
+        composable(NavRoutes.STOCK_COUNTS) {
+            val stockCountViewModel: StockCountViewModel = viewModel()
+            StockCountScreen(
+                user = user,
+                viewModel = stockCountViewModel,
                 onBack = { navController.popBackStack() },
             )
         }

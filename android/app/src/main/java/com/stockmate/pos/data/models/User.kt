@@ -27,4 +27,13 @@ data class User(
     val canCreatePurchaseRequest: Boolean
         get() = role in listOf(UserRole.OWNER, UserRole.ADMIN, UserRole.STORE_MANAGER) ||
             permissions?.canCreatePurchaseRequest == true
+
+    val isStoreAdmin: Boolean
+        get() = role == UserRole.OWNER || role == UserRole.ADMIN
+
+    val isManagerOrAbove: Boolean
+        get() = isStoreAdmin || role == UserRole.STORE_MANAGER
+
+    val canChangePrice: Boolean
+        get() = isStoreAdmin || permissions?.canChangePrice == true
 }

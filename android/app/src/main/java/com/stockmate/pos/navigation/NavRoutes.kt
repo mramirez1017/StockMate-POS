@@ -15,6 +15,9 @@ object NavRoutes {
     const val RECEIPT_DETAIL = "receipt/{saleId}"
     const val BLUETOOTH_PRINTER = "bluetooth_printer"
     const val NOTIFICATIONS = "notifications"
+    const val ACCESS_REQUESTS = "access_requests"
+    const val STOCK_TRANSFERS = "stock_transfers"
+    const val STOCK_COUNTS = "stock_counts"
     const val MESSAGES = "messages/{poId}"
 
     fun deliveryChecklist(poId: String) = "delivery_checklist/$poId"

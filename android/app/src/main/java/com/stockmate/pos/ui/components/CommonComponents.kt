@@ -553,7 +553,7 @@ fun StockMateUserCard(
 
                 Text(
 
-                    text = roleLabel.replace('_', ' ').lowercase().replaceFirstChar { it.titlecase() },
+                    text = roleLabel,
 
                     style = MaterialTheme.typography.bodySmall,
 

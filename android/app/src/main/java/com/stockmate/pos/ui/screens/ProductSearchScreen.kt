@@ -153,6 +153,14 @@ private fun ProductResultCard(product: Product, onClick: () -> Unit) {
                     }
                     StockPill(product)
                 }
+                if (product.isPacked) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        product.packNote(product.currentStock),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = StockMateColors.Slate400,
+                    )
+                }
             }
             Text(
                 formatCurrency(product.sellingPrice),

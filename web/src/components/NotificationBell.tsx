@@ -10,6 +10,8 @@ import {
   MessageSquare,
   PackageCheck,
   Truck,
+  ArrowLeftRight,
+  Undo2,
 } from "lucide-react";
 import type { NotificationKind, StoreNotification } from "@stockmate/types";
 import { formatDate } from "@/lib/format";
@@ -41,6 +43,12 @@ function NotificationIcon({ kind }: { kind: NotificationKind }) {
     case "PERMISSION_REQUEST":
     case "PERMISSION_REQUEST_RESOLVED":
       return <KeyRound size={16} className="shrink-0 text-indigo-500" strokeWidth={1.75} />;
+    case "STOCK_TRANSFER":
+      return <ArrowLeftRight size={16} className="shrink-0 text-cyan-600" strokeWidth={1.75} />;
+    case "SALE_RETURN":
+      return <Undo2 size={16} className="shrink-0 text-rose-500" strokeWidth={1.75} />;
+    case "STOCK_COUNT":
+      return <ClipboardCheck size={16} className="shrink-0 text-indigo-500" strokeWidth={1.75} />;
     default:
       return <CheckCheck size={16} className="shrink-0 text-emerald-500" strokeWidth={1.75} />;
   }

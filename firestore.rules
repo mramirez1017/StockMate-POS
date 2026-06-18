@@ -159,6 +159,12 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // Returns/refunds against sales. Written by the createSaleReturn callable.
+      match /saleReturns/{returnId} {
+        allow read: if isStoreUser(storeId) || isPlatformOwner();
+        allow write: if false;
+      }
+
       match /stockMovements/{movementId} {
         allow read: if isStoreUser(storeId) || isPlatformOwner();
         allow write: if false;
@@ -183,6 +189,26 @@ service cloud.firestore {
         allow read: if isStoreUser(storeId) || isPlatformOwner();
         allow create: if isManagerOrAbove(storeId) || isPlatformOwner();
         allow update: if false;
+      }
+
+      // Branch-to-branch transfers. All writes go through the stock-transfer
+      // callables (admin SDK); clients only read in real time.
+      match /stockTransfers/{transferId} {
+        allow read: if isStoreUser(storeId) || isPlatformOwner();
+        allow write: if false;
+      }
+
+      // Physical stock-take / cycle-count sessions. Writes go through the
+      // stock-count callables (admin SDK); clients only read in real time.
+      match /stockCounts/{countId} {
+        allow read: if isStoreUser(storeId) || isPlatformOwner();
+        allow write: if false;
+      }
+
+      // Held / parked carts. Written by the park-sale callables (admin SDK).
+      match /parkedSales/{parkedId} {
+        allow read: if isStoreUser(storeId) || isPlatformOwner();
+        allow write: if false;
       }
 
       match /auditLogs/{logId} {

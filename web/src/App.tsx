@@ -14,6 +14,8 @@ import UpcomingDeliveries from "@/pages/UpcomingDeliveries";
 import DeliveryChecklist from "@/pages/DeliveryChecklist";
 import Inventory from "@/pages/Inventory";
 import StockAdjustments from "@/pages/StockAdjustments";
+import StockTransfers from "@/pages/StockTransfers";
+import StockCount from "@/pages/StockCount";
 import StockDisposal from "@/pages/StockDisposal";
 import Promos from "@/pages/Promos";
 import Sales from "@/pages/Sales";
@@ -59,6 +61,8 @@ function AppRoutes() {
         <Route path="deliveries/:poId" element={<StoreStaffRoute><DeliveryChecklist /></StoreStaffRoute>} />
         <Route path="inventory" element={<StoreStaffRoute><Inventory /></StoreStaffRoute>} />
         <Route path="stock-adjustments" element={<StoreStaffRoute><StockAdjustments /></StoreStaffRoute>} />
+        <Route path="transfers" element={<StoreStaffRoute><StockTransfers /></StoreStaffRoute>} />
+        <Route path="stock-counts" element={<StoreStaffRoute><StockCount /></StoreStaffRoute>} />
         <Route path="disposal" element={<StoreStaffRoute><StockDisposal /></StoreStaffRoute>} />
         <Route path="promos" element={<StoreStaffRoute><Promos /></StoreStaffRoute>} />
         <Route path="activity" element={<StoreStaffRoute><Activity /></StoreStaffRoute>} />
