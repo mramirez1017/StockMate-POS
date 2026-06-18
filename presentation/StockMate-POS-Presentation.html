@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>StockMate POS — AMDev Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --navy:#0a2a4a;
+    --navy-deep:#06182c;
+    --blue:#1f78d6;
+    --blue-bright:#2b8fe6;
+    --sky:#eaf3fb;
+    --sky-2:#dcebf9;
+    --ink:#10243b;
+    --muted:#5b7089;
+    --line:#e3e9f1;
+    --green:#1f9d57;
+    --amber:#d98a1f;
+    --red:#d64545;
+    --grad:linear-gradient(135deg,#0a2a4a 0%,#103a63 45%,#1f78d6 100%);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;}
+  body{
+    font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    background:#06182c;
+    color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+    overflow:hidden;
+  }
+
+  /* ---------- Stage / slides ---------- */
+  .stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:28px;}
+  .slide{
+    display:none;
+    width:100%;max-width:1180px;height:100%;max-height:680px;
+    background:#fff;border-radius:20px;overflow:hidden;
+    box-shadow:0 30px 80px rgba(0,0,0,.45);
+    position:relative;
+    flex-direction:column;
+  }
+  .slide.active{display:flex;animation:fade .35s ease;}
+  @keyframes fade{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+
+  /* header strip on content slides */
+  .s-head{display:flex;align-items:center;gap:14px;padding:18px 40px 0 40px;}
+  .s-head .logo{height:30px;border-radius:6px;background:#fff;}
+  .s-head .eyebrow{margin-left:auto;font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--blue);}
+  .s-body{flex:1;padding:14px 40px 44px 40px;display:flex;flex-direction:column;min-height:0;}
+  .s-body.center{justify-content:center;}
+
+  h1{font-size:40px;font-weight:900;color:var(--navy);line-height:1.08;letter-spacing:-.01em;}
+  h2{font-size:30px;font-weight:800;color:var(--navy);line-height:1.12;letter-spacing:-.01em;}
+  .lead{font-size:17px;color:#3a526b;font-weight:500;margin-top:6px;}
+  .sub{font-size:14px;color:var(--muted);}
+  p{font-size:15px;color:#39506a;line-height:1.5;}
+  .accent{color:var(--blue);}
+  .rule{height:4px;width:64px;border-radius:4px;background:var(--grad);margin:14px 0 18px;}
+
+  ul.feat{list-style:none;margin-top:14px;display:flex;flex-direction:column;gap:11px;}
+  ul.feat li{position:relative;padding-left:30px;font-size:15.5px;color:#33495f;line-height:1.45;}
+  ul.feat li::before{content:"";position:absolute;left:0;top:3px;width:18px;height:18px;border-radius:6px;background:var(--sky);
+    background-image:linear-gradient(135deg,var(--blue),var(--blue-bright));}
+  ul.feat li b{color:var(--navy);font-weight:700;}
+
+  /* ---------- Title slide ---------- */
+  .title-slide{background:var(--grad);}
+  .title-slide .s-body{align-items:flex-start;justify-content:center;color:#fff;}
+  .logo-card{background:#fff;border-radius:18px;padding:16px 26px;display:inline-flex;box-shadow:0 12px 30px rgba(0,0,0,.25);}
+  .logo-card img{height:74px;display:block;}
+  .title-slide h1{color:#fff;font-size:52px;margin-top:26px;}
+  .title-slide .lead{color:#d7e8fb;font-size:19px;max-width:760px;}
+  .title-badge{display:inline-flex;align-items:center;gap:9px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);
+    color:#eaf3fb;font-weight:600;font-size:13px;padding:8px 14px;border-radius:999px;margin-top:26px;backdrop-filter:blur(4px);}
+  .title-foot{position:absolute;bottom:30px;left:40px;right:40px;display:flex;justify-content:space-between;align-items:center;
+    color:#bcd6f1;font-size:13px;font-weight:500;border-top:1px solid rgba(255,255,255,.15);padding-top:14px;}
+
+  /* ---------- Grids & cards ---------- */
+  .cols{display:grid;gap:16px;margin-top:14px;}
+  .cols.c2{grid-template-columns:1fr 1fr;}
+  .cols.c3{grid-template-columns:repeat(3,1fr);}
+  .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 16px;box-shadow:0 4px 14px rgba(16,36,59,.05);}
+  .card h3{font-size:15.5px;color:var(--navy);font-weight:800;margin-bottom:6px;display:flex;align-items:center;gap:8px;}
+  .card p{font-size:13.5px;line-height:1.45;}
+  .ic{width:34px;height:34px;border-radius:9px;background:var(--grad);display:inline-flex;align-items:center;justify-content:center;
+    color:#fff;font-size:17px;flex:none;}
+
+  /* ---------- Flow diagram ---------- */
+  .flow{display:flex;align-items:stretch;gap:0;margin-top:18px;flex-wrap:wrap;}
+  .node{flex:1;min-width:120px;background:var(--sky);border:1px solid var(--sky-2);border-radius:12px;padding:12px 12px;
+    text-align:center;display:flex;flex-direction:column;justify-content:center;gap:4px;}
+  .node .n-t{font-weight:800;color:var(--navy);font-size:13.5px;}
+  .node .n-s{font-size:11.5px;color:var(--muted);line-height:1.3;}
+  .node.blue{background:var(--grad);border:none;}
+  .node.blue .n-t{color:#fff;} .node.blue .n-s{color:#d7e8fb;}
+  .arrow{align-self:center;color:var(--blue);font-size:22px;font-weight:800;padding:0 8px;flex:none;}
+  .arrow.down{transform:rotate(90deg);}
+
+  /* win/lose two-sided */
+  .lane{display:flex;align-items:center;gap:10px;margin-top:12px;}
+  .lane .tag{flex:none;width:130px;font-weight:800;font-size:12px;text-transform:uppercase;letter-spacing:.08em;padding:8px 10px;border-radius:10px;text-align:center;}
+  .tag.biz{background:#0a2a4a;color:#fff;}
+  .tag.usr{background:var(--sky);color:var(--navy);}
+  .lane .items{display:flex;gap:8px;flex-wrap:wrap;}
+  .chip{background:#fff;border:1px solid var(--line);border-radius:999px;padding:6px 13px;font-size:12.5px;font-weight:600;color:#33495f;}
+
+  /* ---------- Tables ---------- */
+  table.tbl{width:100%;border-collapse:collapse;margin-top:14px;font-size:13px;}
+  table.tbl th{background:var(--navy);color:#fff;text-align:left;padding:10px 14px;font-weight:700;font-size:12px;letter-spacing:.03em;}
+  table.tbl th:first-child{border-top-left-radius:10px;}
+  table.tbl th:last-child{border-top-right-radius:10px;}
+  table.tbl td{padding:10px 14px;border-bottom:1px solid var(--line);color:#3a516a;vertical-align:top;line-height:1.4;}
+  table.tbl td:first-child{font-weight:700;color:var(--navy);width:170px;white-space:nowrap;}
+  table.tbl tr:nth-child(even) td{background:#f7fafd;}
+
+  /* ---------- Roles ---------- */
+  .roles{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:18px;}
+  .role{border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 4px 14px rgba(16,36,59,.05);}
+  .role .rh{padding:14px 16px;color:#fff;font-weight:800;font-size:16px;}
+  .role.owner .rh{background:linear-gradient(135deg,#06182c,#0a2a4a);}
+  .role.mgr .rh{background:linear-gradient(135deg,#0a2a4a,#1f78d6);}
+  .role.cash .rh{background:linear-gradient(135deg,#1f78d6,#2b8fe6);}
+  .role .rb{padding:12px 16px;background:#fff;}
+  .role .rb li{list-style:none;font-size:12.8px;color:#3a516a;padding:5px 0 5px 18px;position:relative;line-height:1.35;}
+  .role .rb li::before{content:"";position:absolute;left:0;top:9px;width:8px;height:8px;border-radius:3px;background:var(--blue);}
+
+  /* ---------- Mockups ---------- */
+  .mock{border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 10px 30px rgba(16,36,59,.12);background:#fff;}
+  .mock-bar{background:#0a2a4a;display:flex;align-items:center;gap:7px;padding:9px 14px;}
+  .mock-bar i{width:10px;height:10px;border-radius:50%;background:#3a587a;display:block;}
+  .mock-bar .url{margin-left:10px;background:rgba(255,255,255,.12);color:#cfe0f2;font-size:11px;padding:3px 12px;border-radius:6px;font-weight:500;}
+  .mock-body{padding:14px;background:#f4f8fc;}
+  .kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+  .kpi .k{background:#fff;border:1px solid var(--line);border-radius:10px;padding:11px;}
+  .kpi .k .lab{font-size:10.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;}
+  .kpi .k .val{font-size:21px;font-weight:900;color:var(--navy);margin-top:3px;}
+  .kpi .k.b{background:var(--grad);border:none;} .kpi .k.b .lab{color:#cfe3f7;} .kpi .k.b .val{color:#fff;}
+  .bars{display:flex;align-items:flex-end;gap:10px;height:92px;margin-top:12px;padding:12px;background:#fff;border:1px solid var(--line);border-radius:10px;}
+  .bars span{flex:1;border-radius:6px 6px 0 0;background:linear-gradient(var(--blue-bright),var(--blue));}
+
+  .pos{display:grid;grid-template-columns:1.4fr 1fr;gap:12px;}
+  .pos .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;}
+  .pos .p{background:#fff;border:1px solid var(--line);border-radius:9px;padding:9px;}
+  .pos .p .nm{font-size:11.5px;font-weight:700;color:var(--navy);}
+  .pos .p .pr{font-size:11px;color:var(--blue);font-weight:700;margin-top:3px;}
+  .pos .cart{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;flex-direction:column;}
+  .pos .cart .ci{display:flex;justify-content:space-between;font-size:12px;padding:5px 0;border-bottom:1px dashed var(--line);color:#3a516a;}
+  .pos .cart .tot{margin-top:auto;display:flex;justify-content:space-between;font-weight:900;color:var(--navy);font-size:16px;padding-top:8px;}
+  .pos .pay{margin-top:10px;background:var(--grad);color:#fff;text-align:center;border-radius:8px;padding:9px;font-weight:800;font-size:13px;}
+
+  .badge{display:inline-block;font-size:10.5px;font-weight:800;padding:3px 9px;border-radius:999px;letter-spacing:.03em;}
+  .b-green{background:#e6f6ee;color:var(--green);}
+  .b-amber{background:#fcf2e1;color:var(--amber);}
+  .b-blue{background:var(--sky);color:var(--blue);}
+
+  .deliver{columns:2;column-gap:30px;margin-top:10px;}
+  .deliver li{list-style:none;break-inside:avoid;padding:9px 0 9px 30px;position:relative;font-size:14.5px;color:#33495f;border-bottom:1px solid var(--line);}
+  .deliver li::before{content:"\2713";position:absolute;left:0;top:8px;width:20px;height:20px;border-radius:6px;background:var(--grad);color:#fff;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;}
+
+  .pagenum{position:absolute;bottom:14px;right:22px;font-size:11px;color:#9fb0c2;font-weight:600;}
+
+  /* closing */
+  .close-slide{background:var(--grad);}
+  .close-slide .s-body{color:#fff;justify-content:center;align-items:center;text-align:center;}
+  .close-slide h1{color:#fff;font-size:46px;}
+  .close-slide .lead{color:#d7e8fb;font-size:19px;}
+  .contact{margin-top:22px;display:flex;flex-direction:column;gap:8px;align-items:center;}
+  .contact a,.contact span{color:#fff;font-size:16px;font-weight:600;text-decoration:none;}
+  .contact .row{display:flex;align-items:center;gap:9px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);padding:9px 18px;border-radius:999px;}
+
+  /* ---------- Controls ---------- */
+  .topbar{position:fixed;top:14px;left:0;right:0;display:flex;align-items:center;gap:12px;padding:0 20px;z-index:50;pointer-events:none;}
+  .hint{font-size:12px;color:#9fc0e6;font-weight:500;pointer-events:none;}
+  .ctrl{margin-left:auto;display:flex;gap:9px;pointer-events:auto;}
+  .btn{border:0;cursor:pointer;font-family:inherit;font-weight:700;font-size:13px;border-radius:9px;padding:9px 15px;display:inline-flex;align-items:center;gap:7px;}
+  .btn.primary{background:#2b8fe6;color:#fff;}
+  .btn.ghost{background:rgba(255,255,255,.12);color:#dceaf8;border:1px solid rgba(255,255,255,.25);}
+  .btn:hover{filter:brightness(1.08);}
+  .navbar{position:fixed;bottom:16px;left:0;right:0;display:flex;justify-content:center;align-items:center;gap:14px;z-index:50;}
+  .navbar button{pointer-events:auto;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.25);color:#fff;width:38px;height:38px;border-radius:50%;font-size:17px;cursor:pointer;}
+  .navbar button:hover{background:rgba(255,255,255,.28);}
+  .counter{color:#bcd6f1;font-size:13px;font-weight:600;min-width:64px;text-align:center;}
+
+  /* ---------- Print ---------- */
+  @page{size:landscape;margin:0;}
+  @media print{
+    html,body{overflow:visible;background:#fff;height:auto;}
+    .topbar,.navbar{display:none !important;}
+    .stage{position:static;display:block;padding:0;}
+    .slide{display:flex !important;max-width:none;width:100%;height:100vh;max-height:none;border-radius:0;box-shadow:none;
+      page-break-after:always;break-after:page;}
+    .slide:last-child{page-break-after:auto;}
+    h1{font-size:38px;} h2{font-size:28px;}
+  }
+  @media (max-width:760px){ h1{font-size:30px;} h2{font-size:23px;} .cols.c2,.cols.c3,.roles,.kpi{grid-template-columns:1fr;} .pos{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="hint">Arrows / Space to navigate &nbsp;•&nbsp; F to present &nbsp;•&nbsp; Esc to exit &nbsp;•&nbsp; P to print</div>
+  <div class="ctrl">
+    <button class="btn ghost" onclick="window.print()">Save as PDF</button>
+    <button class="btn primary" onclick="toggleFs()">Present ▶</button>
+  </div>
+</div>
+
+<div class="stage" id="stage">
+
+  <!-- 1 TITLE -->
+  <section class="slide title-slide active">
+    <div class="s-body">
+      <div class="logo-card"><img src="amdev-logo.png" alt="AMDev Studio" /></div>
+      <h1>StockMate&nbsp;POS</h1>
+      <div class="lead">A complete inventory &amp; point-of-sale platform for multi-branch retail and stores.</div>
+      <div class="lead" style="margin-top:8px;">We design and build business systems that don't just record sales — they control stock, prevent loss, and run every branch in real time.</div>
+      <div class="title-badge">📦 Showcase project: a live, end-to-end Inventory + POS system — web back office &amp; Android app in one.</div>
+    </div>
+    <div class="title-foot"><span>AMDev Studio</span><span>Building Applications, Creating Solutions</span></div>
+  </section>
+
+  <!-- 2 WHO WE ARE -->
+  <section class="slide">
+    <div class="s-head"><img class="logo" src="amdev-logo.png"><span class="eyebrow">Who we are</span></div>
+    <div class="s-body">
+      <h2>AMDev Studio builds complete business systems</h2>
+      <div class="rule"></div>
+      <p>Not just websites — connected platforms that run daily operations end to end: a powerful web back office plus a mobile app, sharing one live database.</p>
+      <ul class="feat">
+        <li><b>Modern, mobile-first design</b> that works on desktop, tablet, and phone browsers.</li>
+        <li><b>Real-time data</b> — a change in one place updates everywhere instantly.</li>
+        <li><b>No server headaches</b> — secure, cloud-hosted, and low maintenance.</li>
+        <li><b>Full handover</b> — documentation and training included.</li>
+      </ul>
+      <p style="margin-top:14px;"><b>StockMate POS</b> in this deck is a live example of what we deliver — and it adapts to your business.</p>
+    </div>
+    <div class="pagenum">2 / 22</div>
+  </section>
+
+  <!-- 3 CHALLENGE -->
+  <section class="slide">
+    <div class="s-head"><img class="logo" src="amdev-logo.png"><span class="eyebrow">The problem</span></div>
+    <div class="s-body">
+      <h2>The challenge most stores face</h2>
+      <div class="rule"></div>
+      <p>Money quietly leaks out through the gaps in manual stock-keeping.</p>
+      <ul class="feat">
+        <li><b>Stock is a guess.</b> No one knows the real on-hand count until something runs out — or expires.</li>
+        <li><b>Multiple branches, no single view.</b> Each store keeps its own notebook or spreadsheet.</li>
+        <li><b>Shrinkage &amp; errors.</b> Price overrides, voids, and adjustments happen with no approval or trail.</li>
+        <li><b>Slow restocking.</b> Reorders are reactive; deliveries are received without checks.</li>
+        <li><b>Reports take days</b> to compile by hand — and are out of date by the time they're ready.</li>
+      </ul>
+      <p style="margin-top:12px;"><b>Result:</b> lost sales, dead stock, theft, and decisions made on stale numbers.</p>
+    </div>
+    <div class="pagenum">3 / 22</div>
+  </section>
+
+  <!-- 4 WHAT WE BUILD -->
+  <section class="slide">
+    <div class="s-head"><img class="logo" src="amdev-logo.png"><span class="eyebrow">The solution</span></div>
+    <div class="s-body">
+      <h2>One connected platform, three surfaces</h2>
+      <div class="rule"></div>
+      <div class="cols c3">
+        <div class="card"><h3><span class="ic">🖥️</span>Web back office</h3><p>Owners &amp; managers run inventory, purchasing, transfers, approvals, reports, and users from any browser.</p></div>
+        <div class="card"><h3><span class="ic">🛒</span>POS terminal</h3><p>Cashiers sell fast on web or the Android app — barcode or search, split payments, receipts.</p></div>
+        <div class="card"><h3><span class="ic">📱</span>Android app</h3><p>Mobile POS, stock counts, receiving, and transfers — built for the shop floor.</p></div>
+      </div>
+      <p style="margin-top:18px;">Everything shares <b>one live database</b>, so a sale, a stock transfer, or a price change appears across every screen and branch <span class="accent">within a second</span>.</p>
+    </div>
+    <div class="pagenum">4 / 22</div>
+  </section>
+
+  <!-- 5 BENEFITS BOTH SIDES -->
+  <section class="slide">
+    <div class="s-head"><img class="logo" src="amdev-logo.png"><span class="eyebrow">Value</span></div>
+    <div class="s-body">
+      <h2>A win for the owner and the staff</h2>
+      <div class="rule"></div>
+      <div class="flow">
+        <div class="node"><span class="n-t">Receive stock</span><span class="n-s">Purchase orders &amp; deliveries</span></div>
+        <span class="arrow">›</span>
+        <div class="node"><span class="n-t">Sell at POS</span><span class="n-s">Barcode / search</span></div>
+        <span class="arrow">›</span>
+        <div class="node blue"><span class="n-t">Stock auto-updates</span><span class="n-s">Every branch, live</span></div>
+        <span class="arrow">›</span>
+        <div class="node"><span class="n-t">Reorder &amp; report</span><span class="n-s">Alerts &amp; analytics</span></div>
+      </div>
+      <div class="lane"><div class="tag biz">Owner wins</div><div class="items">
+        <span class="chip">Accurate stock 24/7</span><span class="chip">Less shrinkage</span><span class="chip">Approval trail</span><span class="chip">Live reports</span></div></div>
+      <div class="lane"><div class="tag usr">Staff wins</div><div class="items">
+        <span class="chip">Fast checkout</span><span class="chip">No manual counts</span><span class="chip">Clear tasks</span><span class="chip">Fewer mistakes</span></div></div>
+    </div>
+    <div class="pagenum">5 / 22</div>
+  </section>
+
+  <!-- 6 ROLES -->
+  <section class="slide">
+    <div class="s-head"><img class="logo" src="amdev-logo.png"><span class="eyebrow">Roles &amp; access</span></div>
+    <div class="s-body">
+      <h2>Everyone sees only what they should</h2>
+      <div class="rule"></div>
+      <div class="roles">
+        <div class="role owner"><div class="rh">Store Owner</div><ul class="rb">
+          <li>Full control of all branches</li>
+          <li>Approves adjustments, transfers, price &amp; void requests</li>
+          <li>Manages users, roles &amp; permissions</li>
+          <li>Sees profit, cost &amp; all reports</li></ul></div>
+        <div class="role mgr"><div class="rh">Branch Manager</div><ul class="rb">
+          <li>Runs their assigned branch</li>
+          <li>Manages stock &amp; receiving</li>
+          <li>Requests approvals from the owner</li>
+          <li>Branch-scoped reports</li></ul></div>
+        <div class="role cash"><div class="rh">Cashier</div><ul class="rb">
+          <li>Point of sale &amp; receipts</li>
+          <li>Product search &amp; barcode</li>
+          <li>Returns within policy</li>
+          <li>Can request added permissions</li></ul></div>
+      </div>
+      <p style="margin-top:16px;">Role-based access (RBAC) is enforced on the server, not just hidden in the screen — data stays protected.</p>
+    </div>
+    <div class="pagenum">6 / 22</div>
+  </section>
+
+  <!-- 7 USER REGISTRATION -->
+  <section class="slide">
+    <div class="s-head"><img class="logo" src="amdev-logo.png"><span class="eyebrow">Onboarding</span></div>
+    <div class="s-body">
+      <h2>How users are registered &amp; onboarded</h2>
+      <div class="rule"></div>
+      <p>The owner stays in control — staff can't self-register into your store. Access is invitation-based.</p>
+      <div class="flow">
+        <div class="node blue"><span class="n-t">Owner invites</span><span class="n-s">Adds staff email, role &amp; branch</span></div>
+        <span class="arrow">›</span>
+        <div class="node"><span class="n-t">Staff accepts</span><span class="n-s">Signs in with that email (or Google)</span></div>
+        <span class="arrow">›</span>
+        <div class="node"><span class="n-t">Account claimed</span><span class="n-s">Profile linked to the invite</span></div>
+        <span class="arrow">›</span>
+        <div class="node"><span class="n-t">Role applied</span><span class="n-s">Sees only their branch &amp; tools</span></div>
+      </div>
+      <div class="cols c2" style="margin-top:18px;">
+        <div class="card"><h3>Activate / deactivate</h3><p>Owners can deactivate a leaver in one click — access is revoked instantly, history is kept.</p></div>
+        <div class="card"><h3>Change role anytime</h3><p>Promote a cashier to manager or move a staffer between branches; the change reflects everywhere live.</p></div>
+      </div>
+    </div>
+    <div class="pagenum">7 / 22</div>
+  </section>
+
+  <!-- 8 POS -->
+  <section class="slide">
+    <div class="s-head"><img class="logo" src="amdev-logo.png"><span class="eyebrow">Feature · Point of Sale</span></div>
+    <div class="s-body">
+      <h2>Fast, forgiving checkout</h2>
+      <div class="rule"></div>
+      <div class="cols c2" style="grid-template-columns:1fr 1.05fr;align-items:start;">
+        <ul class="feat">
+          <li><b>Barcode scan or live search</b> — type any letters/numbers, get instant suggestions.</li>
+          <li><b>Split payments</b> — cash + card + e-wallet on one sale.</li>
+          <li><b>Manual discounts</b> with reason — controlled by permission.</li>
+          <li><b>Hold &amp; resume sales</b> (parked carts) for busy counters.</li>
+          <li><b>Receipts</b> printed, or sent by email / SMS.</li>
+        </ul>
+        <div class="mock">
+          <div class="mock-bar"><i></i><i></i><i></i><span class="url">stockmate · POS</span></div>
+          <div class="mock-body pos">
+            <div>
+              <div class="grid">
+                <div class="p"><div class="nm">Bottled Water</div><div class="pr">₱10.00</div></div>
+                <div class="p"><div class="nm">Instant Coffee</div><div class="pr">₱45.00</div></div>
+                <div class="p"><div class="nm">Canned Tuna</div><div class="pr">₱25.00</div></div>
+                <div class="p"><div class="nm">Shampoo Sachet</div><div class="pr">₱8.00</div></div>
+                <div class="p"><div class="nm">Cooking Oil 1L</div><div class="pr">₱85.00</div></div>
+                <div class="p"><div class="nm">Soap Bar</div><div class="pr">₱22.00</div></div>
+              </div>
+            </div>
+            <div class="cart">
+              <div class="ci"><span>Bottled Water ×3</span><span>₱30.00</span></div>
+              <div class="ci"><span>Canned Tuna ×2</span><span>₱50.00</span></div>
+              <div class="ci"><span>Cooking Oil ×1</span><span>₱85.00</span></div>
+              <div class="tot"><span>Total</span><span>₱165.00</span></div>
+              <div class="pay">Charge &amp; print receipt</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="pagenum">8 / 22</div>
+  </section>
+
+  <!-- 9 INVENTORY -->
+  <section class="slide">
+    <div class="s-head"><img class="logo" src="amdev-logo.png"><span class="eyebrow">Feature · Inventory</span></div>
+    <div class="s-body">
+      <h2>One source of truth for stock</h2>
+      <div class="rule"></div>
+      <table class="tbl">
+        <tr><th>Area</th><th>What it does</th></tr>
+        <tr><td>Products &amp; catalog</td><td>Name, category, supplier, barcode/SKU, selling price &amp; supplier cost — shared across all branches.</td></tr>
+        <tr><td>Per-branch stock</td><td>Live on-hand count for every branch, with reorder &amp; critical thresholds and colour-coded status.</td></tr>
+        <tr><td>Categories &amp; suppliers</td><td>Organised, searchable lists with duplicate-avoidance when adding new entries.</td></tr>
+        <tr><td>Expiry &amp; disposals</td><td>Track expiry dates and record disposals with reasons.</td></tr>
+      </table>
+      <p style="margin-top:14px;">Every movement — sale, receive, transfer, adjustment, return — is recorded, so the number on screen always matches the shelf.</p>
+    </div>
+    <div class="pagenum">9 / 22</div>
+  </section>
+
+  <!-- 10 PACK / BOX HANDLING -->
+  <section class="slide">
+    <div class="s-head"><img class="logo" src="amdev-logo.png"><span class="eyebrow">Feature · Units &amp; packs</span></div>
+    <div class="s-body">
+      <h2>Buy in boxes, sell in pieces</h2>
+      <div class="rule"></div>
+      <div class="cols c2" style="grid-template-columns:1.05fr 1fr;align-items:start;">
+        <ul class="feat">
+          <li><b>Define pack size</b> once — e.g. 1 box = 200 pieces.</li>
+          <li><b>Receive in boxes</b>, and stock is converted to pieces automatically.</li>
+          <li><b>Sell loose pieces</b> at the POS — ideal for sachets, sticks &amp; bulk goods.</li>
+          <li><b>Cost per box</b> in, cost per piece derived for accurate valuation.</li>
+          <li><b>See boxes left</b> at a glance, even partial boxes.</li>
+        </ul>
+        <div class="mock">
+          <div class="mock-bar"><i></i><i></i><i></i><span class="url">stockmate · Products</span></div>
+          <div class="mock-body">
+            <div class="card" style="box-shadow:none;">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <div><div style="font-weight:800;color:var(--navy);">Instant Coffee 3-in-1</div><div class="sub" style="font-size:11px;">beverages · Main Branch</div></div>
+                <span class="badge b-green">In stock</span>
+              </div>
+              <hr style="border:none;border-top:1px solid var(--line);margin:10px 0;">
+              <div style="display:flex;justify-content:space-between;font-size:13px;"><span class="sub">Stock</span><b style="color:var(--navy);">100 pcs</b></div>
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-top:3px;"><span class="sub">Packs</span><span style="color:var(--blue);font-weight:700;">≈ 0.5 box left</span></div>
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-top:3px;"><span class="sub">Supplier cost</span><span>₱2.50/pc · ₱500/box</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="pagenum">10 / 22</div>
+  </section>
+
+  <!-- 11 PURCHASING & RECEIVING -->
+  <section class="slide">
+    <div class="s-head"><img class="logo" src="amdev-logo.png"><span class="eyebrow">Feature · Purchasing</span></div>
+    <div class="s-body">
+      <h2>From purchase order to shelf</h2>
+      <div class="rule"></div>
+      <div class="flow">
+        <div class="node"><span class="n-t">Request</span><span class="n-s">Branch requests stock</span></div>
+        <span class="arrow">›</span>
+        <div class="node"><span class="n-t">Purchase order</span><span class="n-s">Owner orders from supplier</span></div>
+        <span class="arrow">›</span>
+        <div class="node blue"><span class="n-t">In transit</span><span class="n-s">Upcoming delivery tracked</span></div>
+        <span class="arrow">›</span>
+        <div class="node"><span class="n-t">Receive</span><span class="n-s">Check qty, damage, expiry</span></div>
+        <span class="arrow">›</span>
+        <div class="node"><span class="n-t">Stock in</span><span class="n-s">Inventory auto-updated</span></div>
+      </div>
+      <div class="cols c2" style="margin-top:18px;">
+        <div class="card"><h3>Delivery checklist</h3><p>Receive against the PO line by line — record received, damaged, missing, and expiry. Receive in boxes; the system fills the pieces.</p></div>
+        <div class="card"><h3>Auto-reorder</h3><p>Critical-stock items can generate a draft purchase order automatically, so you never run dry on best-sellers.</p></div>
+      </div>
+    </div>
+    <div class="pagenum">11 / 22</div>
+  </section>
+
+  <!-- 12 STOCK TRANSFERS -->
+  <section class="slide">
+    <div class="s-head"><img class="logo" src="amdev-logo.png"><span class="eyebrow">Feature · Branch transfers</span></div>
+    <div class="s-body">
+      <h2>Move stock between branches — with control</h2>
+      <div class="rule"></div>
+      <div class="flow">
+        <div class="node"><span class="n-t">Manager requests</span><span class="n-s">Branch A → Branch B</span></div>
+        <span class="arrow">›</span>
+        <div class="node blue"><span class="n-t">Owner approves</span><span class="n-s">Stock OUT of Branch A</span></div>
+        <span class="arrow">›</span>
+        <div class="node"><span class="n-t">In transit</span><span class="n-s">Shows as incoming delivery</span></div>
+        <span class="arrow">›</span>
+        <div class="node"><span class="n-t">Branch B receives</span><span class="n-s">Stock IN at Branch B</span></div>
+      </div>
+      <div class="cols c2" style="margin-top:18px;">
+        <div class="card"><h3>Owner shortcut</h3><p>When the owner initiates a transfer, it's auto-approved and dispatched immediately — no extra step.</p></div>
+        <div class="card"><h3>Always visible</h3><p>In-transit transfers appear on the receiving branch's dashboard and Upcoming Deliveries, so nothing gets lost.</p></div>
+      </div>
+    </div>
+    <div class="pagenum">12 / 22</div>
+  </section>
+
+  <!-- 13 APPROVAL WORKFLOWS -->
+  <section class="slide">
+    <div class="s-head"><img class="logo" src="amdev-logo.png"><span class="eyebrow">Governance</span></div>
+    <div class="s-body">
+      <h2>Sensitive actions need approval</h2>
+      <div class="rule"></div>
+      <p>Nothing risky happens silently. Managers request; owners approve or reject — every decision is logged with who, when, and why.</p>
+      <table class="tbl">
+        <tr><th>Request</th><th>Who requests → who approves</th></tr>
+        <tr><td>Stock adjustment</td><td>Manager corrects a count → Owner approves before stock changes.</td></tr>
+        <tr><td>Price change</td><td>Staff with permission propose → recorded in the audit log.</td></tr>
+        <tr><td>Stock transfer</td><td>Manager requests a branch transfer → Owner approves &amp; dispatches.</td></tr>
+        <tr><td>Sale void / refund</td><td>Cashier requests a void → Owner approves; stock restocks correctly.</td></tr>
+        <tr><td>Extra permissions</td><td>Manager/cashier requests a capability → Owner grants the access level.</td></tr>
+      </table>
+    </div>
+    <div class="pagenum">13 / 22</div>
+  </section>
+
+  <!-- 14 RETURNS & STOCK TAKE -->
+  <section class="slide">
+    <div class="s-head"><img class="logo" src="amdev-logo.png"><span class="eyebrow">Feature · Accuracy</span></div>
+    <div class="s-body">
+      <h2>Returns &amp; physical stock-takes</h2>
+      <div class="rule"></div>
+      <div class="cols c2">
+        <div class="card"><h3><span class="ic">↩️</span>Returns &amp; refunds</h3><p>Process a return against the original sale; choose which items come back. Good stock is restocked automatically and the numbers stay correct.</p></div>
+        <div class="card"><h3><span class="ic">🧮</span>Stock-take / cycle count</h3><p>Open a counting session (full or partial), enter the physical count, and the system posts the variance — so the books match the shelf.</p></div>
+      </div>
+      <div class="cols c2" style="margin-top:16px;">
+        <div class="card"><h3><span class="ic">🔔</span>Smart alerts</h3><p>Low-stock and critical-stock notifications, with deep links straight to the item that needs action.</p></div>
+        <div class="card"><h3><span class="ic">🗑️</span>Disposals</h3><p>Record damaged or expired stock with a reason — keeping valuation honest.</p></div>
+      </div>
+    </div>
+    <div class="pagenum">14 / 22</div>
+  </section>
+
+  <!-- 15 REPORTS -->
+  <section class="slide">
+    <div class="s-head"><img class="logo" src="amdev-logo.png"><span class="eyebrow">Feature · Insight</span></div>
+    <div class="s-body">
+      <h2>Reports that are always up to date</h2>
+      <div class="rule"></div>
+      <div class="cols c2" style="grid-template-columns:1fr 1.1fr;align-items:start;">
+        <ul class="feat">
+          <li><b>Live dashboard</b> — today's sales, transactions, low &amp; critical stock.</li>
+          <li><b>Inventory valuation &amp; COGS</b> for true profit.</li>
+          <li><b>Stock-aging &amp; dead-stock</b> to free up cash.</li>
+          <li><b>Top sellers</b> and movement history.</li>
+          <li><b>Branch &amp; date filters</b> across everything.</li>
+        </ul>
+        <div class="mock">
+          <div class="mock-bar"><i></i><i></i><i></i><span class="url">stockmate · Dashboard</span></div>
+          <div class="mock-body">
+            <div class="kpi">
+              <div class="k b"><div class="lab">Today's sales</div><div class="val">₱48.2k</div></div>
+              <div class="k"><div class="lab">Transactions</div><div class="val">126</div></div>
+              <div class="k"><div class="lab">Low stock</div><div class="val">9</div></div>
+              <div class="k"><div class="lab">Critical</div><div class="val">3</div></div>
+            </div>
+            <div class="bars">
+              <span style="height:48%"></span><span style="height:66%"></span><span style="height:40%"></span>
+              <span style="height:82%"></span><span style="height:58%"></span><span style="height:94%"></span><span style="height:70%"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="pagenum">15 / 22</div>
+  </section>
+
+  <!-- 16 LIVE DB DIAGRAM -->
+  <section class="slide">
+    <div class="s-head"><img class="logo" src="amdev-logo.png"><span class="eyebrow">How it connects</span></div>
+    <div class="s-body center">
+      <h2 style="text-align:center;">Everything stays in sync</h2>
+      <div class="rule" style="margin-left:auto;margin-right:auto;"></div>
+      <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:18px;margin-top:10px;">
+        <div class="card">
+          <h3>Web back office</h3>
+          <p>Receive &amp; order stock<br>Approve requests &amp; transfers<br>Manage users &amp; prices<br>Run reports</p>
+        </div>
+        <div style="text-align:center;">
+          <div class="node blue" style="min-width:150px;"><span class="n-t">Live Database</span><span class="n-s">Secure cloud (Firebase)</span></div>
+          <div style="color:var(--blue);font-size:22px;margin:6px 0;">⇅</div>
+          <div class="sub" style="font-size:11px;">real-time</div>
+        </div>
+        <div class="card">
+          <h3>POS &amp; Android app</h3>
+          <p>Sell &amp; print receipts<br>Search / scan products<br>Count &amp; receive stock<br>Get live alerts</p>
+        </div>
+      </div>
+      <p style="text-align:center;margin-top:18px;">A sale on the floor lowers stock in the office instantly. An approved transfer appears at the receiving branch in real time.</p>
+    </div>
+    <div class="pagenum">16 / 22</div>
+  </section>
+
+  <!-- 17 SECURITY / MAINTENANCE -->
+  <section class="slide">
+    <div class="s-head"><img class="logo" src="amdev-logo.png"><span class="eyebrow">Reliability</span></div>
+    <div class="s-body">
+      <h2>Real-time, secure &amp; low-maintenance</h2>
+      <div class="rule"></div>
+      <ul class="feat">
+        <li><b>Update once → live everywhere</b> within a second. No redeploys to change prices or products.</li>
+        <li><b>Built on Google Firebase</b> — trusted, scalable cloud infrastructure that grows with you.</li>
+        <li><b>Role-based security</b> enforced on the server: visitors, cashiers, managers, and owners each see only what they should.</li>
+        <li><b>No server to maintain</b> and low running costs for typical store volumes.</li>
+        <li><b>Automatic backups &amp; uptime</b> handled by the cloud — not by your staff.</li>
+      </ul>
+    </div>
+    <div class="pagenum">17 / 22</div>
+  </section>
+
+  <!-- 18 MAINTENANCE / YOU CONTROL -->
+  <section class="slide">
+    <div class="s-head"><img class="logo" src="amdev-logo.png"><span class="eyebrow">Ownership</span></div>
+    <div class="s-body">
+      <h2>You manage it — no developer needed</h2>
+      <div class="rule"></div>
+      <div class="cols c3">
+        <div class="card"><h3>Your data, your rules</h3><p>Add products, change prices, set thresholds, and manage staff yourself, anytime.</p></div>
+        <div class="card"><h3>Training &amp; docs</h3><p>We hand over full documentation and train your team so day-one is smooth.</p></div>
+        <div class="card"><h3>Support &amp; growth</h3><p>Need a new report or feature later? The system is built to extend — we're a message away.</p></div>
+      </div>
+      <p style="margin-top:18px;">Routine maintenance is essentially zero: the cloud handles servers, scaling, and backups, while you handle the everyday content from a friendly admin screen.</p>
+    </div>
+    <div class="pagenum">18 / 22</div>
+  </section>
+
+  <!-- 19 PLATFORMS -->
+  <section class="slide">
+    <div class="s-head"><img class="logo" src="amdev-logo.png"><span class="eyebrow">Reach</span></div>
+    <div class="s-body">
+      <h2>Works where your team works</h2>
+      <div class="rule"></div>
+      <div class="cols c3">
+        <div class="card"><h3><span class="ic">💻</span>Desktop browser</h3><p>The full back office for owners and managers — no installation.</p></div>
+        <div class="card"><h3><span class="ic">📲</span>Tablet browser</h3><p>A responsive layout that's perfect at the counter or in the stockroom.</p></div>
+        <div class="card"><h3><span class="ic">🤖</span>Android app</h3><p>Native mobile POS, scanning, receiving, counting, and transfers.</p></div>
+      </div>
+      <p style="margin-top:18px;">One account, one database — staff move between web and mobile seamlessly, and everything stays consistent.</p>
+    </div>
+    <div class="pagenum">19 / 22</div>
+  </section>
+
+  <!-- 20 WHAT WE DELIVER -->
+  <section class="slide">
+    <div class="s-head"><img class="logo" src="amdev-logo.png"><span class="eyebrow">Deliverables</span></div>
+    <div class="s-body">
+      <h2>What we deliver</h2>
+      <div class="rule"></div>
+      <ul class="deliver">
+        <li>A complete web back office for inventory &amp; operations</li>
+        <li>A fast POS for web and a native Android app</li>
+        <li>Multi-branch stock with real-time sync</li>
+        <li>Purchasing, receiving &amp; auto-reorder</li>
+        <li>Branch-to-branch transfers with approval</li>
+        <li>Returns, stock-takes &amp; disposals</li>
+        <li>Approval workflows &amp; full audit trail</li>
+        <li>Inventory valuation, COGS &amp; dead-stock reports</li>
+        <li>Role-based access &amp; user management</li>
+        <li>Secure cloud hosting on Firebase</li>
+        <li>Notifications &amp; live dashboards</li>
+        <li>Documentation, training &amp; handover</li>
+      </ul>
+    </div>
+    <div class="pagenum">20 / 22</div>
+  </section>
+
+  <!-- 21 WHY US -->
+  <section class="slide">
+    <div class="s-head"><img class="logo" src="amdev-logo.png"><span class="eyebrow">Why AMDev Studio</span></div>
+    <div class="s-body">
+      <h2>Why AMDev Studio</h2>
+      <div class="rule"></div>
+      <ul class="feat">
+        <li>We build <b>complete business systems</b>, not just brochure sites.</li>
+        <li><b>Designed for your market</b> — local, mobile-first, and fast.</li>
+        <li><b>You stay in control</b> — manage your own data, no developer needed.</li>
+        <li>A <b>proven, working product</b> you can see live today.</li>
+      </ul>
+      <p style="margin-top:16px;"><b>Case study:</b> StockMate POS — a full inventory &amp; point-of-sale platform from stockroom to checkout, running across web and Android in real time.</p>
+    </div>
+    <div class="pagenum">21 / 22</div>
+  </section>
+
+  <!-- 22 CLOSING -->
+  <section class="slide close-slide">
+    <div class="s-body">
+      <div class="logo-card" style="margin-bottom:22px;"><img src="amdev-logo.png" alt="AMDev Studio" /></div>
+      <h1>Let's build yours</h1>
+      <div class="lead">Complete web &amp; mobile platforms for growing businesses.</div>
+      <div class="contact">
+        <div class="row">✉️ <a href="mailto:amdev.studio2026@gmail.com">amdev.studio2026@gmail.com</a></div>
+        <div class="row">🌐 <a href="https://amdev-studio.web.app" target="_blank" rel="noopener">amdev-studio.web.app</a></div>
+      </div>
+    </div>
+    <div class="pagenum" style="color:#cfe0f2;">22 / 22</div>
+  </section>
+
+</div>
+
+<div class="navbar">
+  <button onclick="prev()" aria-label="Previous">‹</button>
+  <div class="counter" id="counter">1 / 22</div>
+  <button onclick="next()" aria-label="Next">›</button>
+</div>
+
+<script>
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const counter = document.getElementById('counter');
+  let idx = 0;
+  function show(i){
+    idx = Math.max(0, Math.min(slides.length - 1, i));
+    slides.forEach((s, n) => s.classList.toggle('active', n === idx));
+    counter.textContent = (idx + 1) + ' / ' + slides.length;
+    document.getElementById('stage').scrollTop = 0;
+  }
+  function next(){ show(idx + 1); }
+  function prev(){ show(idx - 1); }
+  function toggleFs(){
+    if(!document.fullscreenElement){ document.documentElement.requestFullscreen && document.documentElement.requestFullscreen(); }
+    else { document.exitFullscreen && document.exitFullscreen(); }
+  }
+  document.addEventListener('keydown', (e) => {
+    if(['ArrowRight',' ','PageDown'].includes(e.key)){ e.preventDefault(); next(); }
+    else if(['ArrowLeft','PageUp'].includes(e.key)){ e.preventDefault(); prev(); }
+    else if(e.key === 'Home'){ e.preventDefault(); show(0); }
+    else if(e.key === 'End'){ e.preventDefault(); show(slides.length - 1); }
+    else if(e.key === 'f' || e.key === 'F'){ toggleFs(); }
+    else if(e.key === 'p' || e.key === 'P'){ e.preventDefault(); window.print(); }
+  });
+  // tap right/left third of screen to navigate (handy on tablets)
+  document.getElementById('stage').addEventListener('click', (e) => {
+    if(e.target.closest('a,button')) return;
+    const x = e.clientX / window.innerWidth;
+    if(x > 0.6) next(); else if(x < 0.4) prev();
+  });
+  show(0);
+</script>
+</body>
+</html>

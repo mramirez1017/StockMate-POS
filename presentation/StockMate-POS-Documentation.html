@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>StockMate POS — Documentation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --navy:#0a2a4a; --navy-deep:#06182c; --blue:#1f78d6; --blue-bright:#2b8fe6;
+    --sky:#eaf3fb; --sky-2:#dcebf9; --ink:#13283f; --muted:#5b7089; --line:#e3e9f1;
+    --code-bg:#0b2138; --green:#1f9d57; --amber:#c9821b; --red:#d64545;
+    --grad:linear-gradient(135deg,#0a2a4a 0%,#103a63 50%,#1f78d6 100%);
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{margin:0;font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--ink);background:#f3f6fa;-webkit-font-smoothing:antialiased;line-height:1.6;}
+  a{color:var(--blue);text-decoration:none;} a:hover{text-decoration:underline;}
+
+  /* Header */
+  header.top{position:sticky;top:0;z-index:40;background:var(--grad);color:#fff;padding:16px 28px;display:flex;align-items:center;gap:16px;box-shadow:0 6px 20px rgba(6,24,44,.25);}
+  header.top .logo{height:42px;background:#fff;border-radius:8px;padding:5px 8px;}
+  header.top .t{font-size:18px;font-weight:800;line-height:1.15;}
+  header.top .s{font-size:12px;color:#cfe3f7;font-weight:500;}
+  header.top .actions{margin-left:auto;display:flex;gap:10px;}
+  .btn{cursor:pointer;border:0;font-family:inherit;font-weight:700;font-size:13px;border-radius:9px;padding:10px 16px;display:inline-flex;gap:8px;align-items:center;}
+  .btn.primary{background:#fff;color:var(--navy);}
+  .btn.ghost{background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.3);}
+
+  /* Layout */
+  .wrap{max-width:1180px;margin:0 auto;padding:0 24px;display:grid;grid-template-columns:248px 1fr;gap:34px;align-items:start;}
+  nav.toc{position:sticky;top:92px;align-self:start;max-height:calc(100vh - 110px);overflow:auto;font-size:13.5px;padding:18px 0;}
+  nav.toc h4{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:14px 0 8px;}
+  nav.toc a{display:block;color:#4a627c;padding:5px 10px;border-radius:7px;border-left:2px solid transparent;}
+  nav.toc a:hover{background:var(--sky);text-decoration:none;color:var(--navy);border-left-color:var(--blue);}
+  main{background:#fff;border:1px solid var(--line);border-radius:16px;padding:30px 40px 60px;margin:24px 0;box-shadow:0 8px 30px rgba(16,36,59,.06);min-width:0;}
+
+  .doc-title{border-bottom:3px solid var(--sky-2);padding-bottom:18px;margin-bottom:8px;}
+  .doc-title h1{font-size:32px;font-weight:900;color:var(--navy);margin:0 0 6px;letter-spacing:-.01em;}
+  .doc-title p{margin:2px 0;color:var(--muted);font-size:14px;}
+  .meta-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;}
+  .pill{background:var(--sky);color:var(--navy);font-size:12px;font-weight:600;padding:5px 12px;border-radius:999px;border:1px solid var(--sky-2);}
+  .pill b{color:var(--blue);}
+
+  h2{font-size:23px;color:var(--navy);font-weight:800;margin:40px 0 6px;padding-top:8px;letter-spacing:-.01em;scroll-margin-top:90px;}
+  h2 .num{color:var(--blue);font-weight:900;margin-right:8px;}
+  h3{font-size:16.5px;color:var(--navy);font-weight:800;margin:22px 0 6px;}
+  h2 + p, h3 + p{margin-top:6px;}
+  p{margin:10px 0;}
+  .lead{font-size:15px;color:#3a516a;}
+  ul,ol{margin:10px 0;padding-left:22px;} li{margin:5px 0;}
+  hr.s{border:none;border-top:1px solid var(--line);margin:34px 0 0;}
+  code{font-family:'JetBrains Mono',monospace;font-size:12.5px;background:var(--sky);color:#0c3b66;padding:2px 6px;border-radius:5px;}
+  pre{background:var(--code-bg);color:#dce8f5;border-radius:12px;padding:16px 18px;overflow:auto;font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:1.65;margin:14px 0;}
+  pre .c{color:#7fa9cf;} pre .k{color:#6fd1a6;}
+
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px;}
+  th{background:var(--navy);color:#fff;text-align:left;padding:10px 13px;font-weight:700;font-size:12px;letter-spacing:.02em;}
+  th:first-child{border-top-left-radius:9px;} th:last-child{border-top-right-radius:9px;}
+  td{padding:9px 13px;border-bottom:1px solid var(--line);vertical-align:top;color:#39506a;}
+  td code{font-size:11.5px;}
+  tr:nth-child(even) td{background:#f7fafd;}
+  td.k{font-weight:700;color:var(--navy);white-space:nowrap;}
+
+  .note{border-left:4px solid var(--blue);background:var(--sky);border-radius:0 10px 10px 0;padding:12px 16px;margin:16px 0;font-size:13.5px;color:#274b6b;}
+  .note.warn{border-left-color:var(--amber);background:#fdf6ea;color:#6b4f1d;}
+  .note b{color:var(--navy);}
+
+  .diagram{background:#f7fafd;border:1px solid var(--line);border-radius:12px;padding:16px;margin:16px 0;text-align:center;overflow:auto;}
+  .mermaid{font-size:14px;}
+  .cap{font-size:12px;color:var(--muted);margin-top:8px;font-style:italic;}
+
+  .tree{background:var(--code-bg);color:#cfe0f2;border-radius:12px;padding:18px;font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:1.7;overflow:auto;}
+  .tree .d{color:#7fd1ff;} .tree .cm{color:#6f88a6;}
+
+  footer{max-width:1180px;margin:0 auto;padding:10px 24px 40px;color:var(--muted);font-size:13px;}
+
+  @media (max-width:900px){
+    .wrap{grid-template-columns:1fr;} nav.toc{display:none;}
+    main{padding:22px 20px 40px;}
+  }
+  @media print{
+    header.top{position:static;box-shadow:none;}
+    .actions{display:none !important;}
+    nav.toc{display:none;}
+    .wrap{display:block;max-width:none;padding:0;}
+    main{border:none;border-radius:0;box-shadow:none;margin:0;padding:0 6px;}
+    h2{page-break-after:avoid;} table,pre,.diagram,.tree{page-break-inside:avoid;}
+    a{color:var(--ink);}
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <img class="logo" src="amdev-logo.png" alt="AMDev Studio" />
+  <div>
+    <div class="t">StockMate POS — Documentation</div>
+    <div class="s">Multi-branch inventory &amp; point-of-sale platform</div>
+  </div>
+  <div class="actions">
+    <button class="btn ghost" onclick="window.scrollTo({top:0,behavior:'smooth'})">Top ↑</button>
+    <button class="btn primary" onclick="window.print()">Save as PDF / Print</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <nav class="toc">
+    <h4>Contents</h4>
+    <a href="#about">1 · What this app is</a>
+    <a href="#arch">2 · Architecture overview</a>
+    <a href="#stack">3 · Technology stack</a>
+    <a href="#repo">4 · Repository structure</a>
+    <a href="#tenancy">5 · Stores &amp; branches</a>
+    <a href="#roles">6 · Roles &amp; permissions</a>
+    <a href="#onboarding">7 · Auth &amp; onboarding</a>
+    <a href="#functions">8 · Cloud Functions (write path)</a>
+    <a href="#web">9 · Web app &amp; routes</a>
+    <a href="#android">10 · Android app</a>
+    <a href="#inventory">11 · Inventory &amp; movements</a>
+    <a href="#pos">12 · POS &amp; sales</a>
+    <a href="#purchasing">13 · Purchasing &amp; receiving</a>
+    <a href="#transfers">14 · Stock transfers</a>
+    <a href="#counts">15 · Stock counts</a>
+    <a href="#reorder">16 · Auto-reorder</a>
+    <a href="#packs">17 · Units &amp; packs</a>
+    <a href="#approvals">18 · Approval workflows</a>
+    <a href="#notif">19 · Notifications &amp; messaging</a>
+    <a href="#reports">20 · Reports &amp; analytics</a>
+    <a href="#data">21 · Firestore data model</a>
+    <a href="#security">22 · Security model</a>
+    <a href="#realtime">23 · Real-time sync</a>
+    <a href="#setup">24 · Setup &amp; local dev</a>
+    <a href="#deploy">25 · Build &amp; deploy</a>
+    <a href="#maintain">26 · Maintenance checklist</a>
+    <a href="#faq">27 · FAQ</a>
+    <a href="#trouble">28 · Troubleshooting</a>
+    <a href="#files">29 · Key files</a>
+  </nav>
+
+  <main>
+    <div class="doc-title">
+      <h1>StockMate POS — Inventory &amp; Point-of-Sale Platform</h1>
+      <p>Complete developer documentation for the StockMate POS system: the web back office, the Android app, the Firebase Cloud Functions backend, and the shared data model.</p>
+      <div class="meta-row">
+        <span class="pill">Built by <b>AMDev Studio</b></span>
+        <span class="pill">Firebase project: <b>stockmate-pos</b></span>
+        <span class="pill">Live web: <b>stockmate-pos.web.app</b></span>
+        <span class="pill">Generated June 18, 2026</span>
+      </div>
+    </div>
+
+    <!-- 1 -->
+    <h2 id="about"><span class="num">1</span>What this app is</h2>
+    <p>StockMate POS is a <b>multi-tenant, multi-branch</b> inventory and point-of-sale platform. One codebase serves several audiences from one cloud backend:</p>
+    <ul>
+      <li><b>Web back office</b> — a React app where store owners and managers run inventory, purchasing, transfers, approvals, reports, and user management from any browser (desktop or tablet).</li>
+      <li><b>Web POS</b> — the same app's checkout screen for selling at a counter.</li>
+      <li><b>Android app</b> — a Jetpack Compose app for mobile POS, barcode scanning, receiving deliveries, stock counts, and transfers on the shop floor.</li>
+      <li><b>Platform console</b> — a super-admin area (Stores, Analytics) for the platform owner who provisions stores.</li>
+    </ul>
+    <p>Every surface connects to one cloud backend (<b>Firebase</b>). Reads are live; sensitive writes go through <b>Cloud Functions</b>, so a sale, transfer, or price change reflects across every screen and branch within about a second.</p>
+
+    <!-- 2 -->
+    <h2 id="arch"><span class="num">2</span>Architecture overview</h2>
+    <p>Unlike a simple "browser writes directly to the database" app, StockMate routes all <b>business-critical writes through Cloud Functions</b> running the Firebase Admin SDK. Clients only <b>read</b> directly (guarded by Security Rules) and subscribe in real time with <code>onSnapshot</code>. This keeps stock math, approvals, and audit trails authoritative and tamper-proof.</p>
+    <div class="diagram">
+      <div class="mermaid">
+flowchart TB
+  subgraph Clients
+    W["Web app<br/>React + Vite"]
+    A["Android app<br/>Jetpack Compose"]
+  end
+  AUTH["Firebase Authentication<br/>(email/password + Google)"]
+  CF["Cloud Functions<br/>(callable · Admin SDK)<br/>business logic + writes"]
+  FS["Cloud Firestore<br/>(real-time NoSQL)"]
+  RULES{{"Security Rules<br/>read-guards"}}
+  H["Firebase Hosting"]
+
+  W -- "sign in" --> AUTH
+  A -- "sign in" --> AUTH
+  W -- "callable writes" --> CF
+  A -- "callable writes" --> CF
+  CF -- "transactional writes" --> FS
+  W -- "onSnapshot reads" --> RULES
+  A -- "onSnapshot reads" --> RULES
+  RULES --> FS
+  H -. "serves" .-> W
+      </div>
+      <div class="cap">High-level architecture — clients read live data; all sensitive writes flow through Cloud Functions.</div>
+    </div>
+
+    <!-- 3 -->
+    <h2 id="stack"><span class="num">3</span>Technology stack</h2>
+    <table>
+      <tr><th>Layer</th><th>Technology</th></tr>
+      <tr><td class="k">Web front end</td><td>React 18 + TypeScript, built with Vite 6</td></tr>
+      <tr><td class="k">Styling</td><td>Tailwind CSS 3</td></tr>
+      <tr><td class="k">Routing</td><td>React Router 7</td></tr>
+      <tr><td class="k">Charts / icons</td><td>Recharts, lucide-react</td></tr>
+      <tr><td class="k">Barcode (web)</td><td>@zxing/browser</td></tr>
+      <tr><td class="k">Mobile app</td><td>Android — Kotlin + Jetpack Compose (Material 3)</td></tr>
+      <tr><td class="k">Backend logic</td><td>Firebase Cloud Functions v2 (Node.js 20, TypeScript) with the Firebase Admin SDK</td></tr>
+      <tr><td class="k">Auth</td><td>Firebase Authentication (email/password + Google)</td></tr>
+      <tr><td class="k">Database</td><td>Cloud Firestore (real-time NoSQL)</td></tr>
+      <tr><td class="k">Email / SMS</td><td>Nodemailer (receipt email); SMS hook</td></tr>
+      <tr><td class="k">Hosting</td><td>Firebase Hosting</td></tr>
+      <tr><td class="k">Shared types</td><td><code>@stockmate/types</code> — a TypeScript package shared by web + functions</td></tr>
+    </table>
+    <p class="lead">There is no self-managed server. The browser/app talk to Firebase; Cloud Functions hold the write logic, and Firestore Security Rules govern who can read what.</p>
+
+    <!-- 4 -->
+    <h2 id="repo"><span class="num">4</span>Repository structure (monorepo)</h2>
+    <div class="tree">
+StockMate-POS/
+├── <span class="d">shared/types/</span>     <span class="cm"># @stockmate/types — shared TS models &amp; enums (single source of truth)</span>
+├── <span class="d">functions/</span>        <span class="cm"># Firebase Cloud Functions (TypeScript, Admin SDK)</span>
+│   └── <span class="d">src/</span>          <span class="cm"># products, sales, stock, transfers, stockCounts, deliveries, users…</span>
+├── <span class="d">web/</span>              <span class="cm"># React + Vite back office &amp; POS</span>
+│   └── <span class="d">src/</span>
+│       ├── <span class="d">pages/</span>     <span class="cm"># one file per screen (Dashboard, Pos, Products, …)</span>
+│       ├── <span class="d">components/</span> <span class="cm"># DataTable, Pagination, Layout, RouteGuards, Charts…</span>
+│       ├── <span class="d">lib/</span>       <span class="cm"># api.ts (callables), format, productUnits, branchScope…</span>
+│       └── <span class="d">contexts/</span>  <span class="cm"># AuthContext, ActiveBranchContext</span>
+├── <span class="d">android/</span>          <span class="cm"># Kotlin + Jetpack Compose app</span>
+├── <span class="d">firestore.rules</span>   <span class="cm"># Security Rules (read-guards; writes locked to functions)</span>
+├── <span class="d">firebase.json</span>     <span class="cm"># hosting + functions + rules config</span>
+└── <span class="d">.firebaserc</span>       <span class="cm"># default project: stockmate-pos</span>
+    </div>
+    <div class="note"><b>Build order matters:</b> <code>shared/types</code> compiles first, then <code>functions</code> and <code>web</code> consume it. See <a href="#deploy">§24</a>.</div>
+
+    <!-- 5 -->
+    <h2 id="tenancy"><span class="num">5</span>Multi-tenant model: stores &amp; branches</h2>
+    <p>StockMate is multi-tenant. Each <b>store</b> is an isolated tenant; almost all data lives under <code>stores/{storeId}/…</code>. A store has one or more <b>branches</b>, and most operational records carry a <code>branchId</code> so inventory and reports can be scoped per branch.</p>
+    <div class="diagram">
+      <div class="mermaid">
+flowchart TB
+  PO["platformOwners/{uid}"] -."provisions".-> S
+  IDX["userStoreIndex/{uid}<br/>maps a login → its storeId"] --> S
+  RE["registeredEmails/{emailKey}<br/>pending invites"] -.-> S
+  subgraph S["stores/{storeId}"]
+    direction TB
+    U["users/{uid}"]
+    B["branches/{branchId}"]
+    P["products / categories / suppliers"]
+    INV["branchInventory (per branch &amp; product)"]
+    OPS["sales · stockMovements · transfers · counts · POs …"]
+  end
+      </div>
+      <div class="cap">Three top-level helper collections route a login to its tenant; everything else is nested under the store.</div>
+    </div>
+    <p>Client queries are <b>branch-scoped</b> (see <code>web/src/lib/branchScope.ts</code>): store-wide roles (owner/admin/platform owner) see all branches; managers and cashiers are limited to their assigned <code>branchId</code>.</p>
+
+    <!-- 6 -->
+    <h2 id="roles"><span class="num">6</span>User roles &amp; permissions</h2>
+    <p>Roles are defined in <code>@stockmate/types</code> as <code>UserRole</code>:</p>
+    <table>
+      <tr><th>Role</th><th>Scope</th><th>What they can do</th></tr>
+      <tr><td class="k">PLATFORM_OWNER</td><td>All stores</td><td>Platform super-admin. Provisions stores, sees the Stores &amp; Analytics console. Tracked in the top-level <code>platformOwners</code> collection.</td></tr>
+      <tr><td class="k">ADMIN <span style="font-weight:400">(Store Owner)</span></td><td>One store, all branches</td><td>Full control of a store: products, prices, approvals, users, reports. Approves manager requests.</td></tr>
+      <tr><td class="k">STORE_MANAGER</td><td>One branch</td><td>Runs a branch: stock, receiving, requests transfers/adjustments, branch-scoped reports.</td></tr>
+      <tr><td class="k">CASHIER</td><td>One branch</td><td>POS &amp; receipts, product search, returns within policy. May request extra permissions.</td></tr>
+    </table>
+    <h3>Granular permissions</h3>
+    <p>On top of roles, individual users can be granted flags (<code>CustomPermissions</code>): <code>canVoidSale</code>, <code>canApproveStockAdjustment</code>, <code>canViewSupplierCost</code>, <code>canCreatePurchaseRequest</code>, <code>canChangePrice</code>. Managers/cashiers can <b>request</b> any <code>RequestablePermission</code>; an admin approves it (see <a href="#approvals">§18</a>).</p>
+    <div class="note">Role checks are enforced <b>twice</b>: in the UI (route guards, hidden buttons) and on the server (Cloud Functions + Security Rules). The server is the source of truth.</div>
+
+    <!-- 7 -->
+    <h2 id="onboarding"><span class="num">7</span>Authentication &amp; user onboarding</h2>
+    <p>There is <b>no public self-registration into a store</b>. Access is invitation-based: an admin registers a staff email, the person signs in with that email, and the account is claimed and linked to the store with a role and branch.</p>
+    <div class="diagram">
+      <div class="mermaid">
+flowchart LR
+  A["Admin invites staff<br/>registerUserEmail()<br/>→ registeredEmails"] --> B["Staff signs in<br/>(email/password or Google)"]
+  B --> C["claimAccount()<br/>links uid → store"]
+  C --> D["writes userStoreIndex/{uid}<br/>+ stores/{storeId}/users/{uid}"]
+  D --> E["Role &amp; branch applied<br/>sees only their scope"]
+      </div>
+      <div class="cap">Invitation-based onboarding — handled by the user callables (Admin SDK).</div>
+    </div>
+    <ul>
+      <li><b>Login</b> is shared at <code>/login</code>; after sign-in the app routes by role (<code>HomeRedirect</code>). Deactivated accounts (<code>status != ACTIVE</code>) are blocked.</li>
+      <li><b>Role / permission changes</b> go through <code>updateUserRole</code> and <code>setUserPermissions</code> callables and reflect live.</li>
+      <li><b>Deactivate</b> a leaver with <code>deactivateRegisteredEmail</code>; access is revoked while history is preserved.</li>
+      <li>Relevant callables: <code>registerUserEmail</code>, <code>claimAccount</code>, <code>updateUserRole</code>, <code>setUserPermissions</code>, <code>deactivateRegisteredEmail</code>, <code>repairPlatformOwnerSession</code>.</li>
+    </ul>
+
+    <!-- 8 -->
+    <h2 id="functions"><span class="num">8</span>Cloud Functions (the write path)</h2>
+    <p>All sensitive writes are <b>callable functions</b> invoked from <code>web/src/lib/api.ts</code> (and the Android repository). They run with the Admin SDK, validate the caller's role, perform transactional writes, and emit stock movements / audit logs / notifications. Firestore Rules set <code>write:false</code> on these collections so they can <b>only</b> be changed via functions.</p>
+    <table>
+      <tr><th>Area</th><th>Callables</th></tr>
+      <tr><td class="k">Products</td><td><code>createProduct</code>, <code>updateProduct</code>, <code>changeProductPrice</code>, <code>updateProductBarcode</code>, <code>generateInternalBarcode</code></td></tr>
+      <tr><td class="k">Purchasing</td><td><code>createPurchaseOrder</code>, <code>updatePurchaseOrderStatus</code>, <code>createPurchaseRequest</code>, <code>updatePurchaseRequest</code>, <code>approvePurchaseRequest</code>, <code>rejectPurchaseRequest</code>, <code>fulfillPurchaseRequest</code></td></tr>
+      <tr><td class="k">Deliveries</td><td><code>receiveDelivery</code></td></tr>
+      <tr><td class="k">Sales / POS</td><td><code>createSale</code>, <code>applyPromo</code>, <code>parkSale</code>, <code>deleteParkedSale</code></td></tr>
+      <tr><td class="k">Voids &amp; returns</td><td><code>voidSale</code>, <code>approveSaleVoid</code>, <code>rejectSaleVoid</code>, <code>createSaleReturn</code></td></tr>
+      <tr><td class="k">Stock</td><td><code>createStockAdjustment</code>, <code>approveStockAdjustment</code>, <code>rejectStockAdjustment</code>, <code>createDisposal</code>, <code>updateCriticalStock</code>, <code>updateDashboardStats</code></td></tr>
+      <tr><td class="k">Transfers</td><td><code>createStockTransfer</code>, <code>approveStockTransfer</code>, <code>rejectStockTransfer</code>, <code>receiveStockTransfer</code>, <code>cancelStockTransfer</code></td></tr>
+      <tr><td class="k">Stock counts</td><td><code>createStockCount</code>, <code>submitStockCount</code>, <code>cancelStockCount</code></td></tr>
+      <tr><td class="k">Reorder</td><td><code>generateReorderDraft</code></td></tr>
+      <tr><td class="k">Users &amp; permissions</td><td><code>registerUserEmail</code>, <code>claimAccount</code>, <code>updateUserRole</code>, <code>setUserPermissions</code>, <code>deactivateRegisteredEmail</code>, <code>createPermissionRequest</code>, <code>approvePermissionRequest</code>, <code>rejectPermissionRequest</code></td></tr>
+      <tr><td class="k">Messaging</td><td><code>sendMessage</code>, <code>markThreadRead</code>, <code>unsendMessage</code>, <code>markNotificationRead</code>, <code>markAllNotificationsRead</code>, <code>sendReceiptEmail</code>, <code>sendReceiptSms</code></td></tr>
+      <tr><td class="k">Tenancy</td><td><code>createStore</code>, <code>createBranch</code>, <code>deactivateBranch</code></td></tr>
+    </table>
+
+    <!-- 9 -->
+    <h2 id="web"><span class="num">9</span>Web app — routes &amp; guards</h2>
+    <p>Routes are declared in <code>web/src/App.tsx</code> and wrapped in role guards from <code>components/RouteGuards.tsx</code> (<code>StoreStaffRoute</code>, <code>PosRoute</code>, <code>UserManagementRoute</code>, <code>PlatformOwnerRoute</code>).</p>
+    <table>
+      <tr><th>Path</th><th>Page</th><th>Guard</th></tr>
+      <tr><td><code>/dashboard</code></td><td>KPIs, upcoming deliveries, incoming transfers</td><td>Store staff</td></tr>
+      <tr><td><code>/pos</code></td><td>Point of sale</td><td>POS access</td></tr>
+      <tr><td><code>/products</code> · <code>/categories</code> · <code>/suppliers</code></td><td>Catalog management</td><td>Store staff</td></tr>
+      <tr><td><code>/inventory</code></td><td>Per-branch stock levels</td><td>Store staff</td></tr>
+      <tr><td><code>/purchase-orders</code> · <code>/deliveries</code> · <code>/deliveries/:poId</code></td><td>POs, upcoming deliveries, receiving checklist</td><td>Store staff</td></tr>
+      <tr><td><code>/stock-adjustments</code> · <code>/transfers</code> · <code>/stock-counts</code> · <code>/disposal</code></td><td>Stock operations</td><td>Store staff</td></tr>
+      <tr><td><code>/sales</code> · <code>/reports</code> · <code>/promos</code> · <code>/activity</code></td><td>Sales history, reports, promos, activity feed</td><td>Store staff</td></tr>
+      <tr><td><code>/users</code></td><td>User &amp; permission management</td><td>User-management</td></tr>
+      <tr><td><code>/branches</code> · <code>/settings</code></td><td>Branches &amp; store settings</td><td>Store staff</td></tr>
+      <tr><td><code>/stores</code> · <code>/analytics</code></td><td>Platform console</td><td>Platform owner</td></tr>
+    </table>
+
+    <!-- 10 -->
+    <h2 id="android"><span class="num">10</span>Android app</h2>
+    <p>The Kotlin/Compose app (<code>android/</code>) reuses the same Firebase backend and callables via <code>FirebaseRepository</code>. Navigation routes live in <code>navigation/NavRoutes.kt</code>:</p>
+    <table>
+      <tr><th>Screen</th><th>Purpose</th></tr>
+      <tr><td class="k">POS · Product search</td><td>Sell, scan or alphanumeric search with live suggestions</td></tr>
+      <tr><td class="k">Scan / Assign barcode</td><td>Camera scanning &amp; assigning manufacturer barcodes</td></tr>
+      <tr><td class="k">Receive delivery · Checklist</td><td>Receive POs against the delivery checklist</td></tr>
+      <tr><td class="k">Stock transfers · Stock counts</td><td>Act on transfers; run cycle counts</td></tr>
+      <tr><td class="k">Stock disposal · Critical stocks</td><td>Record disposals; view low stock</td></tr>
+      <tr><td class="k">Receipt · Bluetooth printer</td><td>View sales &amp; print receipts</td></tr>
+      <tr><td class="k">Notifications · Access requests</td><td>Deep-linked alerts; admin review of access requests</td></tr>
+    </table>
+    <div class="note warn">The Android module is built with Android Studio / Gradle and cannot be compiled in this web toolchain. After backend or shared-model changes, rebuild the APK to pick them up.</div>
+
+    <!-- 11 -->
+    <h2 id="inventory"><span class="num">11</span>Inventory &amp; stock movements</h2>
+    <p>Stock is stored in <b>pieces</b> per branch in <code>branchInventory</code>. Every change writes an immutable <code>stockMovements</code> record, typed by <code>StockMovementType</code>:</p>
+    <table>
+      <tr><th>Movement</th><th>Triggered by</th></tr>
+      <tr><td class="k">DELIVERY_RECEIVED</td><td>Receiving a purchase order delivery</td></tr>
+      <tr><td class="k">SALE</td><td>A completed POS sale (stock out)</td></tr>
+      <tr><td class="k">RETURN</td><td>A sale return / refund restocking good items</td></tr>
+      <tr><td class="k">DISPOSAL</td><td>Damaged / expired stock written off</td></tr>
+      <tr><td class="k">ADJUSTMENT</td><td>Approved manual correction or stock-count variance</td></tr>
+      <tr><td class="k">TRANSFER_OUT</td><td>Stock leaving the source branch on a transfer</td></tr>
+      <tr><td class="k">TRANSFER_IN</td><td>Stock arriving at the destination branch</td></tr>
+    </table>
+    <p>Reorder &amp; critical thresholds drive status colours and alerts; the <code>criticalStocks</code> collection is maintained by functions for fast dashboards.</p>
+
+    <!-- 12 -->
+    <h2 id="pos"><span class="num">12</span>POS &amp; sales</h2>
+    <p>The POS supports barcode scan or live search, <b>split payments</b>, <b>manual discounts</b> (permissioned), <b>held/parked carts</b>, and printed/emailed/SMS receipts. A sale is created atomically by <code>createSale</code>.</p>
+    <div class="diagram">
+      <div class="mermaid">
+flowchart LR
+  C["Cashier builds cart<br/>(scan / search)"] --> P["Apply promo / discount<br/>split payment"]
+  P --> S["createSale() · transaction"]
+  S --> S1["decrement branchInventory"]
+  S --> S2["write sale + SALE movements"]
+  S --> S3["refresh dashboardStats<br/>+ criticalStocks"]
+  S --> R["Receipt: print / email / SMS"]
+      </div>
+      <div class="cap">A POS sale is one atomic transaction; stock and stats update everywhere instantly.</div>
+    </div>
+    <p><b>Voids &amp; returns:</b> a cashier can request a void (<code>voidSale</code>) which an admin approves (<code>approveSaleVoid</code>) — or process a partial/full <b>return</b> (<code>createSaleReturn</code>) that restocks good items. Sale state follows <code>SaleStatus</code>: <code>COMPLETED → VOIDED / REFUNDED / PARTIALLY_REFUNDED</code>.</p>
+
+    <!-- 13 -->
+    <h2 id="purchasing"><span class="num">13</span>Purchasing &amp; receiving</h2>
+    <p>A branch can raise a <b>purchase request</b>; an admin turns approved requests into a <b>purchase order</b>; the PO moves through statuses and is received against a checklist.</p>
+    <div class="diagram">
+      <div class="mermaid">
+flowchart LR
+  PR["purchaseRequest<br/>(branch)"] --> AP{"admin approves?"}
+  AP -- yes --> PO["Purchase Order<br/>DRAFT → ORDERED"]
+  PO --> IT["IN_TRANSIT<br/>(upcoming delivery)"]
+  IT --> RD["receiveDelivery()<br/>qty · damaged · expiry"]
+  RD --> PRX["PARTIALLY_RECEIVED / RECEIVED"]
+  PRX --> DONE["COMPLETED<br/>stock in (DELIVERY_RECEIVED)"]
+      </div>
+      <div class="cap">PO lifecycle (<code>POStatus</code>): DRAFT · ORDERED · IN_TRANSIT · PARTIALLY_RECEIVED · RECEIVED · COMPLETED · CANCELLED.</div>
+    </div>
+    <p>Receiving records received / damaged / missing quantities and expiry per line, and supports entering quantities in <b>boxes</b> (see <a href="#packs">§17</a>).</p>
+
+    <!-- 14 -->
+    <h2 id="transfers"><span class="num">14</span>Stock transfers (branch-to-branch)</h2>
+    <p>Managers request transfers; admins approve and dispatch. An admin-initiated transfer is auto-approved. The receiving branch sees it as an incoming delivery (dashboard + Upcoming Deliveries) and completes it.</p>
+    <div class="diagram">
+      <div class="mermaid">
+stateDiagram-v2
+  [*] --> PENDING_APPROVAL: manager requests
+  [*] --> IN_TRANSIT: admin creates (auto-approved)
+  PENDING_APPROVAL --> IN_TRANSIT: approveStockTransfer()<br/>(stock OUT of source)
+  PENDING_APPROVAL --> REJECTED: rejectStockTransfer()
+  PENDING_APPROVAL --> CANCELLED: cancel (no stock moved)
+  IN_TRANSIT --> COMPLETED: receiveStockTransfer()<br/>(stock IN at destination)
+  IN_TRANSIT --> CANCELLED: cancel (stock returns to source)
+  REJECTED --> [*]
+  COMPLETED --> [*]
+  CANCELLED --> [*]
+      </div>
+      <div class="cap">Transfer lifecycle (<code>StockTransferStatus</code>). OUT happens at approval; IN happens at receipt.</div>
+    </div>
+
+    <!-- 15 -->
+    <h2 id="counts"><span class="num">15</span>Stock counts (cycle counts)</h2>
+    <p>A physical stock-take session snapshots expected quantities, the counter enters physical counts, and submitting posts an <code>ADJUSTMENT</code> movement for every non-zero variance — so the books match the shelf.</p>
+    <div class="diagram">
+      <div class="mermaid">
+flowchart LR
+  N["createStockCount()<br/>FULL or PARTIAL · snapshots expected"] --> P["IN_PROGRESS<br/>enter counted qty"]
+  P --> S["submitStockCount()<br/>posts variance adjustments"]
+  S --> D["COMPLETED"]
+  P --> X["cancelStockCount() → CANCELLED"]
+      </div>
+      <div class="cap">Status: <code>StockCountStatus</code> = IN_PROGRESS · COMPLETED · CANCELLED; scope = FULL | PARTIAL.</div>
+    </div>
+
+    <!-- 16 -->
+    <h2 id="reorder"><span class="num">16</span>Auto-reorder &amp; critical stock</h2>
+    <p>Items at or below their critical threshold can generate a <b>draft purchase order</b> via <code>generateReorderDraft</code>, grouped by supplier, so best-sellers don't run dry. Low/critical alerts are pushed as notifications with deep links to the affected item.</p>
+
+    <!-- 17 -->
+    <h2 id="packs"><span class="num">17</span>Units &amp; packs (buy in boxes, sell in pieces)</h2>
+    <p>Stock is always counted in <b>base units (pieces)</b>. A product can define a purchase pack with <code>unitsPerPack</code> (e.g. 200) and a <code>packLabel</code> (e.g. "box"). The pack is a purchasing/receiving convenience only:</p>
+    <ul>
+      <li><b>Receiving</b> accepts a quantity in boxes and multiplies into pieces.</li>
+      <li><b>Supplier cost</b> is entered per box and stored per piece (<code>boxCost ÷ unitsPerPack</code>) for valuation/COGS.</li>
+      <li><b>Displays</b> show the remaining packs — e.g. <code>= 3 boxes + 30 pcs</code>, or <code>≈ 0.5 box left</code> when under one box.</li>
+    </ul>
+    <p>Helpers live in <code>web/src/lib/productUnits.ts</code> (<code>formatPackNote</code>, <code>formatPackBreakdown</code>, <code>piecesToPacks</code>) and on the Android <code>Product</code> model (<code>packNote()</code>).</p>
+
+    <!-- 18 -->
+    <h2 id="approvals"><span class="num">18</span>Approval workflows</h2>
+    <p>Sensitive actions follow a request → review pattern, logged with who/when/why in <code>auditLogs</code>.</p>
+    <div class="diagram">
+      <div class="mermaid">
+flowchart LR
+  M["Manager / Cashier requests"] --> Q{"Admin reviews"}
+  Q -- approve --> AP["Action applied<br/>+ audit log + notify"]
+  Q -- reject --> RJ["Rejected<br/>+ reason + notify"]
+      </div>
+      <div class="cap">Generic approval shape, reused across these requests:</div>
+    </div>
+    <table>
+      <tr><th>Request</th><th>Callables</th></tr>
+      <tr><td class="k">Stock adjustment</td><td><code>createStockAdjustment</code> → <code>approveStockAdjustment</code> / <code>rejectStockAdjustment</code></td></tr>
+      <tr><td class="k">Sale void</td><td><code>voidSale</code> → <code>approveSaleVoid</code> / <code>rejectSaleVoid</code></td></tr>
+      <tr><td class="k">Stock transfer</td><td><code>createStockTransfer</code> → <code>approveStockTransfer</code> / <code>rejectStockTransfer</code></td></tr>
+      <tr><td class="k">Purchase request</td><td><code>createPurchaseRequest</code> → <code>approvePurchaseRequest</code> / <code>rejectPurchaseRequest</code> → <code>fulfillPurchaseRequest</code></td></tr>
+      <tr><td class="k">Extra permission</td><td><code>createPermissionRequest</code> → <code>approvePermissionRequest</code> / <code>rejectPermissionRequest</code></td></tr>
+    </table>
+
+    <!-- 19 -->
+    <h2 id="notif"><span class="num">19</span>Notifications &amp; messaging</h2>
+    <ul>
+      <li><b>In-app notifications</b> (<code>notifications</code>) are per-recipient, written only by functions, with unread badges and deep links (e.g. to a transfer, return, or count). A user can only read notifications addressed to their own uid.</li>
+      <li><b>Threads &amp; messages</b> power staff conversations (admin ↔ manager ↔ cashier), scoped by branch or explicit participants. Writes go through <code>sendMessage</code> / <code>unsendMessage</code> / <code>markThreadRead</code>.</li>
+      <li><b>Receipts</b> can be emailed (<code>sendReceiptEmail</code>) or sent by SMS (<code>sendReceiptSms</code>).</li>
+    </ul>
+
+    <!-- 20 -->
+    <h2 id="reports"><span class="num">20</span>Reports, dashboard &amp; analytics</h2>
+    <ul>
+      <li><b>Dashboard</b> — today's sales, transactions, low &amp; critical stock, upcoming deliveries and incoming transfers; backed by <code>dashboardStats</code> for speed.</li>
+      <li><b>Reports</b> — inventory valuation &amp; COGS, stock-aging / dead-stock, stock movement history, top sellers, with branch &amp; date filters.</li>
+      <li><b>Platform analytics</b> — cross-store metrics for the platform owner.</li>
+      <li><b>Tables</b> across the app use a shared <code>DataTable</code> with sorting and <code>Pagination</code> (25 rows/page by default).</li>
+    </ul>
+
+    <!-- 21 -->
+    <h2 id="data"><span class="num">21</span>Firestore data model</h2>
+    <h3>Top-level collections</h3>
+    <table>
+      <tr><th>Collection</th><th>Holds</th><th>Written by</th></tr>
+      <tr><td class="k">platformOwners</td><td>Platform super-admin uids</td><td>Backend only</td></tr>
+      <tr><td class="k">userStoreIndex</td><td>Maps a login uid → its storeId</td><td>Functions</td></tr>
+      <tr><td class="k">registeredEmails</td><td>Pending staff invites</td><td>Functions</td></tr>
+    </table>
+    <h3>Per-store collections <code>stores/{storeId}/…</code></h3>
+    <table>
+      <tr><th>Collection</th><th>Holds</th><th>Written by</th></tr>
+      <tr><td class="k">users</td><td>Staff profiles (role, branchId, status, permissions)</td><td>Admin / functions</td></tr>
+      <tr><td class="k">branches</td><td>Branch records</td><td>Admin / functions</td></tr>
+      <tr><td class="k">categories</td><td>Product categories</td><td>Admin (direct)</td></tr>
+      <tr><td class="k">products</td><td>Catalog (price, cost, barcode, unitsPerPack…)</td><td>Admin (direct) / functions</td></tr>
+      <tr><td class="k">branchInventory</td><td>Per-branch on-hand stock &amp; thresholds</td><td>Functions only</td></tr>
+      <tr><td class="k">suppliers</td><td>Supplier records</td><td>Admin (direct)</td></tr>
+      <tr><td class="k">purchaseOrders</td><td>POs &amp; their items</td><td>Manager+ (direct/functions)</td></tr>
+      <tr><td class="k">purchaseRequests</td><td>Branch stock requests</td><td>Staff / functions</td></tr>
+      <tr><td class="k">deliveryReceipts</td><td>Received delivery records</td><td>Functions only</td></tr>
+      <tr><td class="k">sales</td><td>Completed sales &amp; payments</td><td>Functions only</td></tr>
+      <tr><td class="k">saleVoidRequests</td><td>Void requests</td><td>Functions only</td></tr>
+      <tr><td class="k">saleReturns</td><td>Returns / refunds</td><td>Functions only</td></tr>
+      <tr><td class="k">parkedSales</td><td>Held carts</td><td>Functions only</td></tr>
+      <tr><td class="k">stockMovements</td><td>Immutable ledger of every stock change</td><td>Functions only</td></tr>
+      <tr><td class="k">stockAdjustments</td><td>Manual corrections (request/approve)</td><td>Manager+ create / functions</td></tr>
+      <tr><td class="k">stockTransfers</td><td>Branch-to-branch transfers</td><td>Functions only</td></tr>
+      <tr><td class="k">stockCounts</td><td>Cycle-count sessions</td><td>Functions only</td></tr>
+      <tr><td class="k">disposals</td><td>Write-offs with reasons</td><td>Functions only</td></tr>
+      <tr><td class="k">promos</td><td>Promotions</td><td>Admin (direct)</td></tr>
+      <tr><td class="k">criticalStocks</td><td>Denormalized low-stock index</td><td>Functions only</td></tr>
+      <tr><td class="k">permissionRequests</td><td>Access-level requests</td><td>Functions only</td></tr>
+      <tr><td class="k">auditLogs</td><td>Sensitive-action trail</td><td>Functions only</td></tr>
+      <tr><td class="k">dashboardStats / dailyReports</td><td>Pre-aggregated metrics</td><td>Functions only</td></tr>
+      <tr><td class="k">threads / messages</td><td>Staff conversations</td><td>Functions only</td></tr>
+      <tr><td class="k">notifications</td><td>Per-recipient in-app alerts</td><td>Functions only</td></tr>
+    </table>
+
+    <!-- 22 -->
+    <h2 id="security"><span class="num">22</span>Security model</h2>
+    <p>Enforced by <code>firestore.rules</code>. The guiding principle: <b>clients read (guarded), functions write</b>. Helper functions resolve the caller's store and role from <code>userStoreIndex</code> + <code>stores/{storeId}/users/{uid}</code>.</p>
+    <table>
+      <tr><th>Collection</th><th>Read</th><th>Write</th></tr>
+      <tr><td class="k">products, categories</td><td>Store users / platform owner</td><td>Admin (direct)</td></tr>
+      <tr><td class="k">suppliers, promos</td><td>Store users</td><td>Admin</td></tr>
+      <tr><td class="k">purchaseOrders</td><td>Store users</td><td>Manager+ (create/update); admin delete</td></tr>
+      <tr><td class="k">branchInventory, sales, stockMovements, stockTransfers, stockCounts, deliveryReceipts, saleReturns, parkedSales, disposals, criticalStocks, notifications</td><td>Store users (notifications: own only)</td><td><code>false</code> — functions only</td></tr>
+      <tr><td class="k">stockAdjustments</td><td>Store users</td><td>Manager+ create; update <code>false</code></td></tr>
+      <tr><td class="k">auditLogs, dailyReports</td><td>Admin / manager+</td><td><code>false</code></td></tr>
+      <tr><td class="k">threads / messages</td><td>Admins, or participants / same branch</td><td><code>false</code></td></tr>
+    </table>
+    <div class="note"><b>Role helpers in rules:</b> <code>isStoreUser</code>, <code>isAdmin</code> (OWNER/ADMIN), <code>isManagerOrAbove</code>, <code>isPlatformOwner</code>, plus <code>sameBranch()</code> for branch scoping.</div>
+
+    <!-- 23 -->
+    <h2 id="realtime"><span class="num">23</span>Real-time sync</h2>
+    <p>Clients subscribe to Firestore with <code>onSnapshot</code>, so a write from any surface (web POS, Android, another branch) appears everywhere within ~1 second — no redeploys for data changes. Lists are branch-scoped client-side via <code>branchScopedQuery</code> and role helpers (<code>isStoreWideAccess</code>).</p>
+
+    <!-- 24 setup -->
+    <h2 id="setup"><span class="num">24</span>Setup &amp; local development</h2>
+    <p><b>Prerequisites:</b> Node.js 20 (LTS), npm, and the Firebase CLI (<code>npm install -g firebase-tools</code>). Android also needs Android Studio + JDK.</p>
+    <pre><span class="c"># from the repo root — install all workspaces</span>
+npm install
+
+<span class="c"># build the shared types first (web &amp; functions depend on it)</span>
+npm run build -w @stockmate/types
+
+<span class="c"># run the web app locally</span>
+npm run dev -w web</pre>
+
+    <!-- deploy -->
+    <h2 id="deploy"><span class="num">25</span>Build &amp; deploy</h2>
+    <p>Always build <code>shared/types</code> before <code>functions</code> / <code>web</code>. On Windows PowerShell, chain steps with <code>;</code> (not <code>&amp;&amp;</code>).</p>
+    <pre><span class="c"># 1) shared types → 2) functions → 3) web</span>
+npm run build -w @stockmate/types
+npm run build -w functions
+npm run build -w web
+
+<span class="c"># deploy</span>
+firebase deploy --only hosting                 <span class="c"># web only</span>
+firebase deploy --only functions               <span class="c"># backend only</span>
+firebase deploy --only firestore:rules         <span class="c"># after editing firestore.rules</span>
+firebase deploy                                <span class="c"># everything</span></pre>
+    <div class="note">Project &amp; hosting target: <code>stockmate-pos</code> (see <code>.firebaserc</code>). The Android APK is built separately in Android Studio.</div>
+
+    <!-- 25 -->
+    <h2 id="maintain"><span class="num">26</span>Maintenance checklist</h2>
+    <ul>
+      <li><b>Catalog</b> — keep products, prices, supplier costs, reorder/critical levels, and pack sizes current.</li>
+      <li><b>Operations</b> — review purchase requests, approve transfers/adjustments, receive deliveries, run periodic stock counts.</li>
+      <li><b>Users</b> — invite/deactivate staff, set roles &amp; permissions, action access requests.</li>
+      <li><b>Content</b> — promos and store settings (tax, currency, receipt header/footer).</li>
+      <li><b>Cloud</b> — Firebase handles servers, scaling, and backups; monitor the functions quota on heavy deploys.</li>
+    </ul>
+
+    <!-- 26 -->
+    <h2 id="faq"><span class="num">27</span>Frequently asked questions</h2>
+    <p><b>Q: Why can't the client write inventory directly?</b><br>To keep stock math, approvals, and the audit trail authoritative. Operational collections are <code>write:false</code> in rules and only mutated by Cloud Functions running the Admin SDK.</p>
+    <p><b>Q: I changed a product but a sent quote/sale didn't change.</b><br>Sales store their own line snapshots; later catalog edits never alter historical records.</p>
+    <p><b>Q: A manager can't approve a transfer.</b><br>Approval is admin-only (<code>isAdmin</code>: OWNER/ADMIN). Managers <i>request</i>; admins approve.</p>
+    <p><b>Q: How do I make someone an admin?</b><br>Change their role via the Users screen (<code>updateUserRole</code>), which writes <code>role: ADMIN</code> on their store user doc. There is no public admin sign-up.</p>
+    <p><b>Q: Can a cashier see another branch's stock?</b><br>No. Queries are branch-scoped and rules restrict store users to their branch unless they're store-wide (owner/admin).</p>
+    <p><b>Q: How are boxes handled for medicine-style goods?</b><br>Define <code>unitsPerPack</code>; stock stays in pieces, receiving accepts boxes, and displays show packs left. See <a href="#packs">§17</a>.</p>
+
+    <!-- 27 -->
+    <h2 id="trouble"><span class="num">28</span>Troubleshooting</h2>
+    <table>
+      <tr><th>Symptom</th><th>Likely cause / fix</th></tr>
+      <tr><td>"Missing or insufficient permissions"</td><td>Caller's role/branch doesn't match the rule, or the query isn't branch-scoped. Confirm the user's <code>role</code>/<code>status</code> and the read guard.</td></tr>
+      <tr><td>A write "silently" fails from the client</td><td>That collection is functions-only (<code>write:false</code>). Call the matching callable instead of writing directly.</td></tr>
+      <tr><td>Web build fails on a new field</td><td>Rebuild <code>@stockmate/types</code> first; web/functions consume the compiled package.</td></tr>
+      <tr><td>PowerShell: <code>&amp;&amp;</code> not recognized</td><td>Chain commands with <code>;</code> on PowerShell.</td></tr>
+      <tr><td>Deploy: "Quota exceeded … mutation requests"</td><td>Transient per-minute function-update limit; the CLI retries — re-run if needed.</td></tr>
+      <tr><td>Android doesn't show new fields</td><td>Rebuild the APK; the app isn't compiled by the web toolchain.</td></tr>
+    </table>
+
+    <!-- 28 -->
+    <h2 id="files"><span class="num">29</span>Key files (for developers)</h2>
+    <table>
+      <tr><th>File / folder</th><th>Responsibility</th></tr>
+      <tr><td class="k">shared/types/src/index.ts</td><td>All shared models, enums, and permission types.</td></tr>
+      <tr><td class="k">functions/src/index.ts</td><td>Exports every Cloud Function.</td></tr>
+      <tr><td class="k">functions/src/utils/auth.ts</td><td>Caller resolution &amp; role guards (<code>requireAdmin</code>, <code>isStoreAdminRole</code>…).</td></tr>
+      <tr><td class="k">functions/src/{products,sales,stock,transfers,…}</td><td>Domain logic per area.</td></tr>
+      <tr><td class="k">web/src/App.tsx</td><td>All web routes + guards.</td></tr>
+      <tr><td class="k">web/src/lib/api.ts</td><td>Typed callable wrappers used by the UI.</td></tr>
+      <tr><td class="k">web/src/lib/branchScope.ts</td><td>Branch-scoped queries &amp; role helpers.</td></tr>
+      <tr><td class="k">web/src/lib/productUnits.ts</td><td>Unit/pack formatting (boxes ↔ pieces).</td></tr>
+      <tr><td class="k">web/src/contexts/AuthContext.tsx</td><td>Current user, role, store, branch state.</td></tr>
+      <tr><td class="k">android/app/src/main/java/com/stockmate/pos/</td><td>Compose UI, ViewModels, <code>FirebaseRepository</code>.</td></tr>
+      <tr><td class="k">firestore.rules</td><td>Read-guards; writes locked to functions.</td></tr>
+    </table>
+
+    <hr class="s">
+    <p style="color:var(--muted);font-size:13px;margin-top:18px;">Last updated: June 2026 · Prepared by AMDev Studio · <a href="https://amdev-studio.web.app">amdev-studio.web.app</a></p>
+  </main>
+</div>
+
+<footer>StockMate POS — internal &amp; client developer documentation. Generated as a printable web page; use “Save as PDF / Print” for a PDF copy.</footer>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'base',
+    themeVariables: {
+      fontFamily: 'Inter, system-ui, sans-serif',
+      primaryColor: '#eaf3fb',
+      primaryBorderColor: '#1f78d6',
+      primaryTextColor: '#0a2a4a',
+      lineColor: '#1f78d6',
+      secondaryColor: '#dcebf9',
+      tertiaryColor: '#f7fafd'
+    }
+  });
+</script>
+</body>
+</html>
