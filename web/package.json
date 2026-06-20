@@ -12,6 +12,7 @@
   "dependencies": {
     "@stockmate/types": "file:../shared/types",
     "@zxing/browser": "^0.2.0",
+    "exceljs": "^4.4.0",
     "firebase": "^11.1.0",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",

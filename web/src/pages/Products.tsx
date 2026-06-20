@@ -12,8 +12,9 @@ import LoadingSpinner from "@/components/LoadingSpinner";
 import BranchFilter from "@/components/BranchFilter";
 import { formatCurrency, statusBadgeClass, stockStatus } from "@/lib/format";
 import {
-  formatOneDecimalForInput,
-  parseOneDecimal,
+  formatMoneyForInput,
+  parseMoney,
+  sanitizeMoneyInput,
   sanitizeOneDecimalInput,
 } from "@/lib/moneyInput";
 import { parseInteger, sanitizeIntegerInput } from "@/lib/integerInput";
@@ -210,8 +211,8 @@ export default function Products() {
       categoryId: p.categoryId,
       unit: p.unit,
       unitSize: p.unitSize != null && p.unitSize > 0 ? String(p.unitSize) : "",
-      sellingPrice: formatOneDecimalForInput(p.sellingPrice),
-      supplierCost: formatOneDecimalForInput(displayCost),
+      sellingPrice: formatMoneyForInput(p.sellingPrice),
+      supplierCost: formatMoneyForInput(displayCost),
       reorderLevel: String(p.reorderLevel),
       criticalLevel: String(p.criticalLevel),
       barcode: p.barcode ?? "",
@@ -231,15 +232,15 @@ export default function Products() {
     e.preventDefault();
     if (!storeId) return;
 
-    const sellingPrice = parseOneDecimal(form.sellingPrice);
+    const sellingPrice = parseMoney(form.sellingPrice);
     if (sellingPrice == null) {
-      setFormError("Enter a valid selling price with at most one decimal (e.g. 99.5)");
+      setFormError("Enter a valid selling price with at most two decimals (e.g. 99.50)");
       return;
     }
 
-    const supplierCostParsed = form.supplierCost.trim() ? parseOneDecimal(form.supplierCost) : null;
+    const supplierCostParsed = form.supplierCost.trim() ? parseMoney(form.supplierCost) : null;
     if (form.supplierCost.trim() && supplierCostParsed == null) {
-      setFormError("Supplier cost must have at most one decimal (e.g. 45.0)");
+      setFormError("Supplier cost must have at most two decimals (e.g. 45.00)");
       return;
     }
 
@@ -300,7 +301,7 @@ export default function Products() {
           productId: editing.id,
           ...payload,
         });
-        if (Math.round(editing.sellingPrice * 10) !== Math.round(sellingPrice * 10)) {
+        if (Math.round(editing.sellingPrice * 100) !== Math.round(sellingPrice * 100)) {
           await api.changeProductPrice({ productId: editing.id, newPrice: sellingPrice });
         }
       } else {
@@ -433,6 +434,19 @@ export default function Products() {
                 {p.name}
               </span>
             ),
+          },
+          {
+            key: "brand",
+            header: "Brand",
+            sortValue: (p) => p.brand ?? "",
+            render: (p) =>
+              p.brand ? (
+                <span className="block max-w-[10rem] truncate text-sm text-slate-600" title={p.brand}>
+                  {p.brand}
+                </span>
+              ) : (
+                <span className="text-slate-400">-</span>
+              ),
           },
           {
             key: "located",
@@ -731,10 +745,10 @@ export default function Products() {
                 className="input-field"
                 required
                 value={form.sellingPrice}
-                placeholder="0.0"
-                onChange={(e) => setForm({ ...form, sellingPrice: sanitizeOneDecimalInput(e.target.value) })}
+                placeholder="0.00"
+                onChange={(e) => setForm({ ...form, sellingPrice: sanitizeMoneyInput(e.target.value) })}
               />
-              <p className="mt-1 text-xs text-slate-500">One decimal place only (e.g. 99.5)</p>
+              <p className="mt-1 text-xs text-slate-500">Up to two decimals (e.g. 99.50)</p>
             </div>
 
             {showCost && (
@@ -749,8 +763,8 @@ export default function Products() {
                   inputMode="decimal"
                   className="input-field"
                   value={form.supplierCost}
-                  placeholder="0.0"
-                  onChange={(e) => setForm({ ...form, supplierCost: sanitizeOneDecimalInput(e.target.value) })}
+                  placeholder="0.00"
+                  onChange={(e) => setForm({ ...form, supplierCost: sanitizeMoneyInput(e.target.value) })}
                 />
                 <p className="mt-1 text-xs text-slate-500">
                   {form.unitsPerPack &&
@@ -758,7 +772,7 @@ export default function Products() {
                   form.supplierCost &&
                   parseFloat(form.supplierCost) > 0
                     ? `≈ ${formatCurrency(parseFloat(form.supplierCost) / parseInt(form.unitsPerPack, 10))} per piece`
-                    : "One decimal place only (e.g. 45.0)"}
+                    : "Up to two decimals (e.g. 45.00)"}
                 </p>
               </div>
             )}
@@ -800,6 +814,16 @@ export default function Products() {
             <div>
               <label className="mb-1 block text-sm font-medium">SKU</label>
               <input className="input-field" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Brand</label>
+              <input
+                className="input-field"
+                value={form.brand}
+                placeholder="e.g. Generics"
+                onChange={(e) => setForm({ ...form, brand: e.target.value })}
+              />
+              <p className="mt-1 text-xs text-slate-500">Optional brand or manufacturer.</p>
             </div>
 
             {editing && (

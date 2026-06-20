@@ -1,13 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, lazy, Suspense } from "react";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { Store } from "@stockmate/types";
 import PageHeader from "@/components/PageHeader";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { isStoreAdmin } from "@/lib/permissions";
+
+const DataImport = lazy(() => import("@/components/DataImport"));
 
 export default function Settings() {
-  const { storeId } = useAuth();
+  const { storeId, user } = useAuth();
+  const canImport = user ? isStoreAdmin(user) : false;
   const [store, setStore] = useState<Partial<Store>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -32,7 +36,7 @@ export default function Settings() {
   if (loading) return <LoadingSpinner />;
 
   return (
-    <div className="max-w-2xl">
+    <div className="max-w-4xl">
       <PageHeader title="Settings" description="Store profile and business configuration" />
       <form onSubmit={handleSave} className="card space-y-6">
         <section>
@@ -65,6 +69,14 @@ export default function Settings() {
         </section>
         <button type="submit" disabled={saving} className="btn-primary">{saving ? "Saving..." : "Save Settings"}</button>
       </form>
+
+      {canImport && (
+        <div className="card mt-6">
+          <Suspense fallback={<LoadingSpinner />}>
+            <DataImport />
+          </Suspense>
+        </div>
+      )}
     </div>
   );
 }
