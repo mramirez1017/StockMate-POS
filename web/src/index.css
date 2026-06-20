@@ -143,16 +143,15 @@
   }
 
   .nav-link {
-    @apply relative flex min-h-[44px] items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 active:bg-slate-200/80;
+    @apply relative flex min-h-[44px] items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300/90 transition hover:bg-white/10 hover:text-white active:bg-white/15;
   }
 
   .nav-link-active {
-    @apply bg-brand-50 font-semibold text-brand-700 hover:bg-brand-50 hover:text-brand-700;
+    @apply bg-brand-gradient font-semibold text-white shadow-glow-sm hover:text-white;
   }
 
-  .nav-link-active::before {
-    content: "";
-    @apply absolute bottom-1 left-0 top-1 w-1 rounded-r bg-brand-600;
+  .nav-link-active:hover {
+    @apply bg-brand-gradient;
   }
 
   .app-topbar {
@@ -199,8 +198,12 @@
     @apply hidden;
   }
 
+  .app-sidebar {
+    background-image: linear-gradient(180deg, #0c2846 0%, #07182e 100%);
+  }
+
   .sidebar-brand {
-    @apply box-border flex h-14 shrink-0 items-center gap-2.5 border-b border-slate-200/70 bg-gradient-to-r from-brand-50 to-accent-50 px-3 py-2 pr-11 lg:pr-3;
+    @apply box-border flex h-14 shrink-0 items-center gap-2.5 border-b border-white/10 px-3 py-2 pr-11 lg:pr-3;
   }
 
   .sidebar-brand-mark {
@@ -212,7 +215,7 @@
   }
 
   .sidebar-brand-name {
-    @apply truncate bg-gradient-to-r from-brand-700 to-accent-600 bg-clip-text text-lg font-bold leading-none tracking-tight text-transparent;
+    @apply truncate text-lg font-bold leading-none tracking-tight text-white;
   }
 
   .sidebar-brand-badge {
@@ -220,13 +223,26 @@
   }
 
   .nav-section-label {
-    @apply mb-2 px-3 text-[10px] font-bold uppercase tracking-widest text-slate-400;
+    @apply mb-2 px-3 text-[10px] font-bold uppercase tracking-widest text-slate-400/70;
   }
 
   .sidebar-scroll {
     @apply overflow-y-auto overscroll-y-contain;
     scrollbar-width: thin;
-    scrollbar-color: rgb(203 213 225) transparent;
+    scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  }
+
+  .sidebar-scroll::-webkit-scrollbar {
+    width: 7px;
+  }
+
+  .sidebar-scroll::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.18);
+    border-radius: 9999px;
+  }
+
+  .sidebar-scroll::-webkit-scrollbar-track {
+    background: transparent;
   }
 
   .table-scroll {
@@ -255,7 +271,7 @@
   }
 
   .user-sidebar-card {
-    @apply rounded-xl border border-slate-200 bg-white p-3 shadow-sm;
+    @apply rounded-xl border border-white/10 bg-white/5 p-3;
   }
 
   /* Smoothly reveal a list of children with a small cascade. */

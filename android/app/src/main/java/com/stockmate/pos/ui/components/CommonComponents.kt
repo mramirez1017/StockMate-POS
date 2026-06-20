@@ -4,6 +4,10 @@ package com.stockmate.pos.ui.components
 
 import androidx.compose.foundation.BorderStroke
 
+import androidx.compose.foundation.Image
+
+import androidx.compose.foundation.background
+
 import androidx.compose.foundation.layout.*
 
 import androidx.compose.foundation.shape.CircleShape
@@ -25,6 +29,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 
 import androidx.compose.ui.Modifier
+
+import androidx.compose.ui.graphics.Brush
 
 import androidx.compose.ui.graphics.Color
 
@@ -191,9 +197,15 @@ fun StockMateAppTopBar(
 
 ) {
 
-    Surface(color = StockMateColors.Panel, shadowElevation = 0.dp) {
+    Surface(color = StockMateColors.Navy900, shadowElevation = 3.dp) {
 
-        Column {
+        Column(
+            modifier = Modifier.background(
+                Brush.verticalGradient(
+                    listOf(StockMateColors.Navy800, StockMateColors.Navy900),
+                ),
+            ),
+        ) {
 
             TopAppBar(
 
@@ -207,7 +219,7 @@ fun StockMateAppTopBar(
 
                         fontWeight = FontWeight.SemiBold,
 
-                        color = StockMateColors.Slate900,
+                        color = Color.White,
 
                         maxLines = 1,
 
@@ -229,11 +241,27 @@ fun StockMateAppTopBar(
 
                                 contentDescription = "Back",
 
-                                tint = StockMateColors.Slate600,
+                                tint = Color.White,
 
                             )
 
                         }
+
+                    } else {
+
+                        Image(
+
+                            painter = painterResource(R.drawable.sidebar_icon),
+
+                            contentDescription = null,
+
+                            modifier = Modifier
+
+                                .padding(start = 12.dp)
+
+                                .size(30.dp),
+
+                        )
 
                     }
 
@@ -253,7 +281,7 @@ fun StockMateAppTopBar(
 
                                 contentDescription = "Sign out",
 
-                                tint = StockMateColors.Slate500,
+                                tint = StockMateColors.Slate300,
 
                             )
 
@@ -265,13 +293,13 @@ fun StockMateAppTopBar(
 
                 colors = TopAppBarDefaults.topAppBarColors(
 
-                    containerColor = StockMateColors.Panel,
+                    containerColor = Color.Transparent,
 
-                    titleContentColor = StockMateColors.Slate900,
+                    titleContentColor = Color.White,
 
-                    navigationIconContentColor = StockMateColors.Slate600,
+                    navigationIconContentColor = Color.White,
 
-                    actionIconContentColor = StockMateColors.Slate600,
+                    actionIconContentColor = StockMateColors.Slate300,
 
                 ),
 
@@ -283,7 +311,7 @@ fun StockMateAppTopBar(
 
             }
 
-            HorizontalDivider(color = StockMateColors.Border.copy(alpha = 0.8f), thickness = 1.dp)
+            HorizontalDivider(color = Color.White.copy(alpha = 0.10f), thickness = 1.dp)
 
         }
 
@@ -335,7 +363,7 @@ fun StockMateContextBar(
 
         modifier = modifier.fillMaxWidth(),
 
-        color = StockMateColors.Panel,
+        color = Color.Transparent,
 
     ) {
 
@@ -359,7 +387,7 @@ fun StockMateContextBar(
 
                 contentDescription = null,
 
-                tint = StockMateColors.Brand600,
+                tint = StockMateColors.Brand200,
 
                 modifier = Modifier.size(16.dp),
 
@@ -373,7 +401,7 @@ fun StockMateContextBar(
 
                 fontWeight = FontWeight.Medium,
 
-                color = StockMateColors.Slate700,
+                color = Color.White.copy(alpha = 0.85f),
 
                 maxLines = 1,
 

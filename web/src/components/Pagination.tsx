@@ -56,7 +56,7 @@ export default function Pagination({
           type="button"
           onClick={() => go(page - 1)}
           disabled={page <= 1}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
           aria-label="Previous page"
         >
           <ChevronLeft size={16} />
@@ -72,7 +72,7 @@ export default function Pagination({
               type="button"
               onClick={() => go(p)}
               aria-current={p === page ? "page" : undefined}
-              className={`h-8 min-w-8 rounded-lg px-2.5 text-sm font-medium transition ${
+              className={`h-10 min-w-10 rounded-lg px-3 text-sm font-medium transition active:scale-95 ${
                 p === page
                   ? "bg-brand-600 text-white"
                   : "border border-slate-200 text-slate-600 hover:bg-slate-50"
@@ -86,7 +86,7 @@ export default function Pagination({
           type="button"
           onClick={() => go(page + 1)}
           disabled={page >= pageCount}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
           aria-label="Next page"
         >
           <ChevronRight size={16} />

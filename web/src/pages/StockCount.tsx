@@ -243,8 +243,8 @@ export default function StockCount() {
 
           {panelError && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{panelError}</p>}
 
-          <div className="mt-3 scroll-area max-h-[calc(100dvh-30rem)] overflow-hidden rounded-lg border border-slate-200 bg-white">
-            <table className="w-full text-sm">
+          <div className="mt-3 table-scroll max-h-[calc(100dvh-30rem)] rounded-lg border border-slate-200 bg-white">
+            <table className="w-full min-w-[420px] text-sm">
               <thead className="sticky top-0 bg-slate-50 text-left text-xs uppercase text-slate-500">
                 <tr>
                   <th className="px-3 py-2">Product</th>
@@ -344,8 +344,8 @@ export default function StockCount() {
                 {isOpen && (
                   <div className="mt-4 space-y-3 border-t border-slate-100 pt-3">
                     {c.status === "COMPLETED" && (
-                      <div className="overflow-hidden rounded-lg border border-slate-100">
-                        <table className="w-full text-sm">
+                      <div className="overflow-x-auto rounded-lg border border-slate-100">
+                        <table className="w-full min-w-[420px] text-sm">
                           <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
                             <tr>
                               <th className="px-3 py-2">Product</th>

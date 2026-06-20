@@ -117,7 +117,7 @@ export default function UpcomingDeliveries() {
         </div>
       )}
 
-      <div className="mb-4 flex gap-2">
+      <div className="mb-4 flex flex-wrap gap-2">
         {(["today", "upcoming", "all"] as const).map((f) => (
           <button key={f} onClick={() => setFilter(f)} className={filter === f ? "btn-primary" : "btn-secondary"}>
             {f === "today" ? "Today" : f === "upcoming" ? "Upcoming" : "All Pending"}

@@ -97,12 +97,12 @@ fun PosScreen(
                             badge = { Badge { Text("${uiState.parkedSales.size}") } },
                         ) {
                             IconButton(onClick = { showParked = true }) {
-                                Icon(Icons.Default.Layers, contentDescription = "Held sales", tint = StockMateColors.Slate600)
+                                Icon(Icons.Default.Layers, contentDescription = "Held sales", tint = StockMateColors.Slate300)
                             }
                         }
                     }
                     IconButton(onClick = onNavigateToPrinter) {
-                        Icon(Icons.Default.Print, contentDescription = "Printer", tint = StockMateColors.Slate600)
+                        Icon(Icons.Default.Print, contentDescription = "Printer", tint = StockMateColors.Slate300)
                     }
                 },
             )

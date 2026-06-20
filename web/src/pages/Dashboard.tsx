@@ -13,6 +13,8 @@ import {
   BarChart3,
   Wallet,
   ArrowRight,
+  ChevronDown,
+  Store,
 } from "lucide-react";
 import {
   LineChart,
@@ -48,7 +50,7 @@ import { branchScopedQuery, isStoreWideAccess } from "@/lib/branchScope";
 import { branchName, useBranches } from "@/lib/useBranches";
 import DateRangeBar, { EMPTY_RANGE, isWithinRange, rangeLabel, type DateRange } from "@/components/DateRangeBar";
 import { StatTile, InDemandTile, TopRankedTile } from "@/components/AnalyticsTiles";
-import { computeSalesAnalytics, type ProductCostInfo } from "@/lib/salesAnalytics";
+import { computeSalesAnalytics, type ProductCostInfo, type SalesAnalytics } from "@/lib/salesAnalytics";
 import { api } from "@/lib/api";
 
 function isActiveSale(s: Sale): boolean {
@@ -201,6 +203,35 @@ export default function Dashboard() {
     const inRange = allSales.filter((s) => isWithinRange(s.createdAt, perfRange));
     return computeSalesAnalytics(inRange, costMap, catNames);
   }, [allSales, perfRange, products, categories]);
+
+  // Per-branch decomposition of the period totals — only for store-wide
+  // viewers (store owner/admin) with more than one branch. Branch-scoped
+  // managers/cashiers only ever load their own branch, so this stays hidden.
+  const showBranchBreakdown = !!user && isStoreWideAccess(user) && branches.length >= 2;
+
+  const branchPerf = useMemo(() => {
+    if (!showBranchBreakdown) return [];
+    const costMap = new Map<string, ProductCostInfo>();
+    products.forEach((p, id) =>
+      costMap.set(id, { name: p.name, supplierCost: p.supplierCost, categoryId: p.categoryId }),
+    );
+    const catNames = new Map<string, string>();
+    categories.forEach((c, id) => catNames.set(id, c.name));
+    const inRange = allSales.filter((s) => isWithinRange(s.createdAt, perfRange));
+    const byBranch = new Map<string, Sale[]>();
+    for (const s of inRange) {
+      const arr = byBranch.get(s.branchId) ?? [];
+      arr.push(s);
+      byBranch.set(s.branchId, arr);
+    }
+    return branches
+      .map((b) => ({
+        branchId: b.id,
+        name: b.name,
+        analytics: computeSalesAnalytics(byBranch.get(b.id) ?? [], costMap, catNames),
+      }))
+      .sort((a, b) => b.analytics.revenue - a.analytics.revenue);
+  }, [showBranchBreakdown, branches, allSales, perfRange, products, categories]);
 
   const getCategoryName = (productId: string) => {
     const product = products.get(productId);
@@ -521,6 +552,43 @@ export default function Dashboard() {
           <InDemandTile label="In-demand category" item={perfAnalytics.topCategory} />
         </div>
       </div>
+
+      {showBranchBreakdown && branchPerf.length > 0 && (
+        <div className="card animate-slide-up">
+          <div className="mb-4 flex flex-col gap-2 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-100 text-brand-600">
+                <Store size={18} strokeWidth={1.85} />
+              </span>
+              <div>
+                <h2 className="section-heading">Performance by branch</h2>
+                <p className="text-xs text-slate-500">
+                  {rangeLabel(perfRange)} · {branchPerf.length} branches · tap to expand
+                </p>
+              </div>
+            </div>
+            <Link
+              to="/reports"
+              className="inline-flex items-center gap-1 self-start text-xs font-semibold text-brand-600 hover:text-brand-700 sm:self-auto"
+            >
+              Full reports <ArrowRight size={13} />
+            </Link>
+          </div>
+          <div className="space-y-2">
+            {branchPerf.map((b, idx) => (
+              <BranchPerfRow
+                key={b.branchId}
+                rank={idx + 1}
+                name={b.name}
+                analytics={b.analytics}
+                totalRevenue={perfAnalytics.revenue}
+                showProfit={!!showProfit}
+                showCapital={!!showCapital}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="stagger-children grid gap-3 sm:gap-4 xl:grid-cols-12">
         <div className="card xl:col-span-5">
@@ -887,6 +955,94 @@ export default function Dashboard() {
           </Link>
         </div>
       </Modal>
+    </div>
+  );
+}
+
+/** One expandable branch row inside the "Performance by branch" panel. */
+function BranchPerfRow({
+  rank,
+  name,
+  analytics,
+  totalRevenue,
+  showProfit,
+  showCapital,
+}: {
+  rank: number;
+  name: string;
+  analytics: SalesAnalytics;
+  totalRevenue: number;
+  showProfit: boolean;
+  showCapital: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const share = totalRevenue > 0 ? (analytics.revenue / totalRevenue) * 100 : 0;
+  return (
+    <div className="rounded-xl border border-slate-200/80 bg-white transition hover:border-brand-200">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-3 px-3 py-3 text-left active:bg-slate-50/80 sm:px-4"
+        aria-expanded={open}
+      >
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600">
+          {rank}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-3">
+            <p className="truncate text-sm font-semibold text-slate-900">{name}</p>
+            <p className="shrink-0 text-sm font-bold tabular-nums text-slate-900">
+              {formatCurrency(analytics.revenue)}
+            </p>
+          </div>
+          <div className="mt-1.5 flex items-center gap-2">
+            <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-slate-100">
+              <div
+                className="h-full rounded-full bg-brand-gradient transition-all duration-500"
+                style={{ width: `${share}%` }}
+              />
+            </div>
+            <span className="shrink-0 text-[11px] font-medium tabular-nums text-slate-400">
+              {share.toFixed(0)}%
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-slate-500">
+            {analytics.transactions} txn{analytics.transactions === 1 ? "" : "s"} · {analytics.itemsSold} item
+            {analytics.itemsSold === 1 ? "" : "s"} sold
+          </p>
+        </div>
+        <ChevronDown
+          size={16}
+          className={`shrink-0 text-slate-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open && (
+        <div className="animate-slide-up border-t border-slate-100 px-3 pb-3 pt-3 sm:px-4">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <MiniMetric label="Transactions" value={String(analytics.transactions)} />
+            <MiniMetric label="Items sold" value={String(analytics.itemsSold)} />
+            {showProfit && <MiniMetric label="Gross profit" value={formatCurrency(analytics.profit)} />}
+            {showCapital && <MiniMetric label="Capital (COGS)" value={formatCurrency(analytics.capital)} />}
+          </div>
+          <div className="mt-2 flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2">
+            <span className="shrink-0 text-xs text-slate-500">Top product</span>
+            <span className="min-w-0 truncate text-right text-xs font-semibold text-slate-700">
+              {analytics.topProduct
+                ? `${analytics.topProduct.name} · ${analytics.topProduct.quantity} sold`
+                : "No sales in this period"}
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MiniMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-slate-100 bg-slate-50/60 px-2.5 py-2">
+      <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="mt-0.5 truncate text-sm font-bold tabular-nums text-slate-900">{value}</p>
     </div>
   );
 }

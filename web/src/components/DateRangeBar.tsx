@@ -103,7 +103,7 @@ export default function DateRangeBar({ value, onChange, className = "" }: DateRa
             key={p.key}
             type="button"
             onClick={() => onChange(p.build())}
-            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+            className={`rounded-lg px-3.5 py-2.5 text-sm font-medium transition active:scale-95 ${
               active === p.key
                 ? "bg-brand-600 text-white shadow-glow-sm"
                 : "bg-slate-100 text-slate-600 hover:bg-slate-200"

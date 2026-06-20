@@ -258,10 +258,11 @@ export default function ThreadPanel({
                         <button
                           type="button"
                           onClick={() => handleUnsend(m.id)}
-                          className="opacity-0 transition group-hover:opacity-100 hover:text-red-500"
+                          className="-m-1 rounded p-1 text-slate-400 transition hover:text-red-500 sm:opacity-0 sm:group-hover:opacity-100"
+                          aria-label="Unsend message"
                           title="Unsend"
                         >
-                          <Trash2 size={12} />
+                          <Trash2 size={13} />
                         </button>
                       )}
                     </div>

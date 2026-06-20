@@ -428,7 +428,11 @@ export default function Products() {
             key: "name",
             header: "Product",
             sortValue: (p) => p.name,
-            render: (p) => <span className="font-medium">{p.name}</span>,
+            render: (p) => (
+              <span className="block max-w-[16rem] truncate font-medium" title={p.name}>
+                {p.name}
+              </span>
+            ),
           },
           {
             key: "located",

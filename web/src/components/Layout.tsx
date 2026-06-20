@@ -190,7 +190,7 @@ function SidebarContent({
         <img src="/sidebar-icon.png" alt="" className="sidebar-brand-mark" aria-hidden />
         <div className="sidebar-brand-text">
           <span className="sidebar-brand-name">
-            Stock<span className="text-brand-600">Mate</span>
+            Stock<span className="text-brand-400">Mate</span>
           </span>
           <span className="sidebar-brand-badge">POS</span>
         </div>
@@ -218,20 +218,20 @@ function SidebarContent({
       </nav>
 
       {(user || isPlatformOwner) && (
-        <div className="shrink-0 border-t border-slate-200/80 p-3">
+        <div className="shrink-0 border-t border-white/10 p-3">
           <div className="user-sidebar-card">
             <div className="mb-3 flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-700">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-500/20 text-sm font-bold text-brand-300">
                 {getInitials(displayName)}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-slate-900">{displayName}</p>
-                <p className="truncate text-xs capitalize text-slate-500">{displayRole.toLowerCase()}</p>
+                <p className="truncate text-sm font-semibold text-white">{displayName}</p>
+                <p className="truncate text-xs capitalize text-slate-400">{displayRole.toLowerCase()}</p>
               </div>
             </div>
             {user && branches.length > 0 && (
               <div>
-                <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400/80">
                   Branch
                 </label>
                 {isStoreAdmin(user) ? (
@@ -244,8 +244,8 @@ function SidebarContent({
                     className="input-field py-2 text-xs"
                   />
                 ) : (
-                  <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-700">
-                    <MapPin size={14} className="text-brand-600" />
+                  <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-xs text-slate-200">
+                    <MapPin size={14} className="text-brand-300" />
                     {branchName(branches, user.branchId)}
                   </div>
                 )}
@@ -340,18 +340,18 @@ export default function Layout() {
       )}
 
       {/* Desktop sidebar */}
-      <aside className="hidden h-dvh w-64 shrink-0 flex-col border-r border-slate-200/80 bg-[#fafafa] safe-top lg:flex">
+      <aside className="app-sidebar hidden h-dvh w-64 shrink-0 flex-col border-r border-white/10 safe-top lg:flex">
         <SidebarContent {...sidebarProps} onNavigate={() => {}} />
       </aside>
 
       {/* Mobile / tablet drawer */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-[min(20rem,88vw)] flex-col border-r border-slate-200 bg-[#fafafa] transition duration-200 safe-top lg:hidden ${
+        className={`app-sidebar fixed inset-y-0 left-0 z-50 flex w-[min(20rem,88vw)] flex-col border-r border-white/10 transition duration-200 safe-top lg:hidden ${
           sidebarOpen ? "translate-x-0 shadow-xl" : "-translate-x-full"
         }`}
       >
         <button
-          className="absolute right-3 top-5 z-10 rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 lg:hidden"
+          className="absolute right-2.5 top-3.5 z-10 rounded-lg p-2.5 text-slate-300 transition hover:bg-white/10 active:scale-95 lg:hidden"
           onClick={closeSidebar}
           aria-label="Close menu"
         >

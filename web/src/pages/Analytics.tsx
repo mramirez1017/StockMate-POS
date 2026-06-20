@@ -64,7 +64,18 @@ export default function Analytics() {
       if (report === "critical" || report === "inventory") {
         const invSnap = await getDocs(collection(db, "stores", analyticsStoreId, "branchInventory"));
         const inv = invSnap.docs.map((d) => d.data() as BranchInventory);
-        if (report === "critical") result.critical = inv.filter((i) => i.currentStock <= i.criticalLevel);
+        if (report === "critical") {
+          const productsSnap = await getDocs(collection(db, "stores", analyticsStoreId, "products"));
+          const names = new Map(productsSnap.docs.map((d) => [d.id, (d.data() as Product).name]));
+          result.critical = inv
+            .filter((i) => i.currentStock <= i.criticalLevel)
+            .map((i) => ({
+              productId: i.productId,
+              productName: names.get(i.productId) ?? i.productId,
+              currentStock: i.currentStock,
+              criticalLevel: i.criticalLevel,
+            }));
+        }
         if (report === "inventory") {
           const productsSnap = await getDocs(collection(db, "stores", analyticsStoreId, "products"));
           const prices = new Map(productsSnap.docs.map((d) => [d.id, (d.data() as Product).sellingPrice]));
@@ -177,10 +188,10 @@ export default function Analytics() {
               )}
               {report === "critical" && (
                 <ul className="space-y-2">
-                  {((data.critical as BranchInventory[]) ?? []).map((i) => (
-                    <li key={i.productId} className="flex justify-between text-sm">
-                      <span>{i.productId}</span>
-                      <span className="text-red-600">
+                  {((data.critical as { productId: string; productName: string; currentStock: number; criticalLevel: number }[]) ?? []).map((i) => (
+                    <li key={i.productId} className="flex items-center justify-between gap-3 text-sm">
+                      <span className="min-w-0 truncate text-slate-700">{i.productName}</span>
+                      <span className="shrink-0 font-medium text-red-600">
                         {i.currentStock} / {i.criticalLevel}
                       </span>
                     </li>

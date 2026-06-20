@@ -1,7 +1,9 @@
 package com.stockmate.pos
 
+import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,7 +22,11 @@ import com.stockmate.pos.viewmodel.AuthViewModel
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        // Navy brand surface across the app -> force light (white) status bar icons.
+        // Bottom bars/content stay light, so leave the navigation bar icons on auto.
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+        )
         setContent {
             StockMateTheme {
                 Surface(

@@ -13,6 +13,7 @@ object StockMateColors {
     val Slate50 = Color(0xFFF8FAFC)
     val Slate100 = Color(0xFFF1F5F9)
     val Slate200 = Color(0xFFE2E8F0)
+    val Slate300 = Color(0xFFCBD5E1)
     val Slate400 = Color(0xFF94A3B8)
     val Slate500 = Color(0xFF64748B)
     val Slate600 = Color(0xFF475569)
@@ -39,6 +40,11 @@ object StockMateColors {
     val Teal600 = Color(0xFF0D9488)
 
     val Red600 = Color(0xFFDC2626)
+
+    // Navy brand surface (mirrors the web app's dark sidebar gradient #0C2846 -> #07182E)
+    val Navy900 = Color(0xFF07182E)
+    val Navy800 = Color(0xFF0C2846)
+    val Navy700 = Color(0xFF13335A)
 
     val Background = Color(0xFFF3F4F6)
     val Panel = Color.White

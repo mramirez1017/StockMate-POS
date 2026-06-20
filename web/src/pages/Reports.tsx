@@ -179,7 +179,18 @@ export default function Reports() {
       if (report === "critical" || report === "inventory") {
         const invSnap = await getDocs(scoped("branchInventory"));
         const inv = invSnap.docs.map((d) => d.data() as BranchInventory);
-        if (report === "critical") result.critical = inv.filter((i) => i.currentStock <= i.criticalLevel);
+        if (report === "critical") {
+          const productsSnap = await getDocs(collection(db, "stores", storeId, "products"));
+          const names = new Map(productsSnap.docs.map((d) => [d.id, (d.data() as Product).name]));
+          result.critical = inv
+            .filter((i) => i.currentStock <= i.criticalLevel)
+            .map((i) => ({
+              productId: i.productId,
+              productName: names.get(i.productId) ?? i.productId,
+              currentStock: i.currentStock,
+              criticalLevel: i.criticalLevel,
+            }));
+        }
         if (report === "inventory") {
           const productsSnap = await getDocs(collection(db, "stores", storeId, "products"));
           const productMap = new Map(
@@ -624,7 +635,7 @@ export default function Reports() {
                   <div className="flex items-center gap-2 border-b border-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">
                     <ChevronDown size={16} /> Transactions ({rangedTransactions.length})
                   </div>
-                  <div className="scroll-area max-h-80">
+                  <div className="table-scroll max-h-80">
                     <table className="w-full min-w-[640px] text-sm">
                       <thead className="sticky top-0 z-10 border-b bg-white">
                         <tr>
@@ -788,8 +799,11 @@ export default function Reports() {
           )}
           {report === "critical" && (
             <ul className="space-y-2">
-              {((data.critical as BranchInventory[]) ?? []).map((i) => (
-                <li key={i.productId} className="flex justify-between text-sm"><span>{i.productId}</span><span className="text-red-600">{i.currentStock} / {i.criticalLevel}</span></li>
+              {((data.critical as { productId: string; productName: string; currentStock: number; criticalLevel: number }[]) ?? []).map((i) => (
+                <li key={i.productId} className="flex items-center justify-between gap-3 text-sm">
+                  <span className="min-w-0 truncate text-slate-700">{i.productName}</span>
+                  <span className="shrink-0 font-medium text-red-600">{i.currentStock} / {i.criticalLevel}</span>
+                </li>
               ))}
             </ul>
           )}

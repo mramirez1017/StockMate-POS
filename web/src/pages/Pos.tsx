@@ -640,9 +640,9 @@ export default function Pos() {
         {/* Cart */}
         <div className="flex min-h-0 flex-col lg:col-span-2">
           <div className="card flex min-h-0 flex-1 flex-col">
-            <div className="mb-4 flex items-center justify-between gap-2">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
               <h2 className="text-lg font-semibold text-slate-900">Cart</h2>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
                 <button
                   type="button"
                   onClick={() => setParkedOpen(true)}
@@ -709,7 +709,7 @@ export default function Pos() {
                       <button
                         type="button"
                         onClick={() => updateQuantity(line.product.id, line.quantity - 1)}
-                        className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 active:bg-slate-200"
+                        className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 active:scale-95 active:bg-slate-200"
                         aria-label="Decrease quantity"
                       >
                         <Minus size={16} />
@@ -719,7 +719,7 @@ export default function Pos() {
                         type="button"
                         onClick={() => updateQuantity(line.product.id, line.quantity + 1)}
                         disabled={atMax}
-                        className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 active:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+                        className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 active:scale-95 active:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
                         aria-label="Increase quantity"
                       >
                         <Plus size={16} />
@@ -920,7 +920,7 @@ export default function Pos() {
                       onChange={(e) => updateSplitRow(idx, { amount: sanitizeMoneyInput(e.target.value) })}
                     />
                     {splitRows.length > 1 && (
-                      <button type="button" onClick={() => removeSplitRow(idx)} className="shrink-0 text-slate-400 hover:text-red-500" aria-label="Remove tender">
+                      <button type="button" onClick={() => removeSplitRow(idx)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-red-50 hover:text-red-500 active:scale-95" aria-label="Remove tender">
                         <X size={16} />
                       </button>
                     )}

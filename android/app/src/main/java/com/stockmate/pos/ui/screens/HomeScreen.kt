@@ -94,7 +94,7 @@ fun HomeScreen(
                             Icon(
                                 Icons.Default.Notifications,
                                 contentDescription = "Notifications",
-                                tint = StockMateColors.Slate600,
+                                tint = StockMateColors.Slate300,
                             )
                         }
                     }
